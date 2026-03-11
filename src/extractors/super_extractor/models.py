@@ -154,7 +154,83 @@ class ExtractionResult:
         import logging
         logger = logging.getLogger(__name__)
         
-        surface_detail = {r.name_normalized: r.surface for r in self.rooms}
+        # Build surface_detail with proper room name handling:
+        # - Map room types to expected display names
+        # - Merge duplicates (keep largest surface)
+        surface_detail = {}
+        
+        def get_display_name(room):
+            '''Handle room name mapping'''
+            room_type = room.room_type
+            type_to_name = {
+                'LIVING_ROOM': 'SEJOUR',
+                'RECEPTION': 'SEJOUR', 
+                'KITCHEN': 'CUISINE',
+                'LIVING_KITCHEN': 'SEJOUR_CUISINE',
+                'ENTRY': 'ENTREE',
+                'BEDROOM': 'CHAMBRE',
+                'BATHROOM': 'SALLE_DE_BAIN',
+                'SHOWER_ROOM': 'SDE',
+                'WC': 'WC',
+                'CIRCULATION': 'CIRCULATION',
+                'STORAGE': 'PLACARD',
+                'DRESSING': 'DRESSING',
+                'BALCONY': 'BALCON',
+                'TERRACE': 'TERRASSE',
+                'GARDEN': 'JARDIN',
+                'LOGGIA': 'LOGGIA',
+                'PATIO': 'PATIO',
+                'PARKING': 'PARKING',
+                'CELLAR': 'CAVE',
+            }
+            base = type_to_name.get(room_type.name, room_type.value.upper())
+            if room.room_number and room.room_number > 0:
+                return f'{base}_{room.room_number}'
+            return base
+        
+        # Process rooms: map names and merge duplicates (keep largest surface)
+        for room in self.rooms:
+            display_name = get_display_name(room)
+            if display_name in surface_detail:
+                if room.surface > surface_detail[display_name]:
+                    surface_detail[display_name] = room.surface
+            else:
+                surface_detail[display_name] = room.surface
+        
+        # Add TOTAL_HABITABLE and TOTAL_ANNEXE (without SURFACE prefix - extract_cli adds it)
+        habitable = self.living_space if self.living_space else self.interior_surface_calc
+        annexe = self.annex_space if self.annex_space else self.annex_surface_calc
+        if habitable > 0:
+            surface_detail['TOTAL_HABITABLE'] = round(habitable, 2)
+        if annexe > 0:
+            surface_detail['TOTAL_ANNEXE'] = round(annexe, 2)
+        
+        # Ensure BATHROOM (SALLE_DE_BAIN) and SHOWER_ROOM (SDE) are always included
+        # Check by both room_type AND name_normalized to catch all cases
+        bathroom_rooms = [r for r in self.rooms 
+                         if r.room_type == RoomType.BATHROOM 
+                         or 'salle_de_bain' in r.name_normalized]
+        shower_rooms = [r for r in self.rooms 
+                       if r.room_type == RoomType.SHOWER_ROOM
+                       or 'salle_d_eau' in r.name_normalized
+                       or 'sde' in r.name_normalized.lower()]
+        
+        # Get unique surfaces (avoid duplicates with same surface)
+        bathroom_surfaces = list(set(round(r.surface, 2) for r in bathroom_rooms))
+        shower_surfaces = list(set(round(r.surface, 2) for r in shower_rooms))
+        
+        if bathroom_surfaces:
+            surface_detail['SALLE_DE_BAIN'] = max(bathroom_surfaces)
+        if shower_surfaces:
+            surface_detail['SDE'] = max(shower_surfaces)
+        
+        # Ensure CUISINE is always included
+        cuisine_rooms = [r for r in self.rooms 
+                       if r.room_type == RoomType.KITCHEN 
+                       or 'cuisine' in r.name_normalized.lower()]
+        cuisine_surfaces = list(set(round(r.surface, 2) for r in cuisine_rooms))
+        if cuisine_surfaces:
+            surface_detail['CUISINE'] = max(cuisine_surfaces)
         
         # Determine options - set to true if room type exists OR detected from raw text
         has_garden  = (
@@ -166,21 +242,21 @@ class ExtractionResult:
         has_terrace = any(r.room_type == RoomType.TERRACE for r in self.rooms) or self.has_terrace_detected
         has_loggia = any(r.room_type == RoomType.LOGGIA for r in self.rooms)
         has_duplex = False
-        # Only detect duplex for apartments (not commercial spaces like MAGASIN)
+        # Only detect duplex for apartments with explicit duplex indicators
+        # Not for simple floor numbers like "2" or "R+1"
         if self.property_type != 'magasin' and self.property_type != 'commercial':
-            # Duplex detection: check if floor has multiple levels (R+X pattern) or if there's a clear duplex indicator
             if self.floor:
                 floor_upper = self.floor.upper()
-                # Check for patterns like R+1+R+2, or duplex in floor name
-                if 'DUPLEX' in floor_upper or 'DUPLEX' in (self.raw_text or '').upper():
+                # Only mark as duplex if explicitly mentioned in floor name
+                if 'DUPLEX' in floor_upper:
                     has_duplex = True
-                # Check for multi-level pattern (R+1+R+2)
-                elif '+' in floor_upper and 'R+' in floor_upper:
+                # Only mark as duplex if floor has explicit multi-level pattern like "R+1+R+2"
+                # NOT for single floor like "2", "R+1", etc.
+                elif '+' in floor_upper and 'R+' in floor_upper and floor_upper.count('R+') > 1:
                     has_duplex = True
-            # Also check if there are multiple floor surfaces in multi_floor_surfaces
-            if not has_duplex and hasattr(self, 'multi_floor_surfaces') and self.multi_floor_surfaces:
-                if len(self.multi_floor_surfaces) > 1:
-                    has_duplex = True
+            # Also check for explicit duplex mention in raw text
+            if not has_duplex and self.raw_text and 'duplex' in self.raw_text.lower():
+                has_duplex = True
         
         # Fallback: detect terrace and balcony from raw text ONLY if not found in rooms
         # Also check for exterior spaces like "Terrasse", "Balcon", "Jardin", "Exterieur", "Loggia"

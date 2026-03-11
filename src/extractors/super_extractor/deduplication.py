@@ -60,11 +60,34 @@ class DeduplicationUtils:
                 continue
             seen[key] = r
             deduped.append(r)
+        
+        # Debug: Log rooms before pass 3
+        logger.info(f"  📋 After Pass 2: {[f'{r.name_normalized}({r.surface})' for r in deduped]}")
 
         if len(deduped) < len(rooms):
             logger.info(
-                f"  🧹 Dédoublonnage: {len(rooms)} → {len(deduped)} pièces"
+                f"  🧹 Dedoublonnage: {len(rooms)} → {len(deduped)} pieces"
             )
+        
+        # Pass 3: Remove duplicate bedrooms (same surface, different room number suffix)
+        bedrooms = [r for r in deduped if r.room_type == RoomType.BEDROOM]
+        non_bedrooms = [r for r in deduped if r.room_type != RoomType.BEDROOM]
+        
+        if len(bedrooms) > 3:
+            # Find duplicate bedrooms by surface (within 0.1 m2 tolerance)
+            bedroom_surfaces = {}
+            for b in bedrooms:
+                surf = round(b.surface, 1)
+                if surf not in bedroom_surfaces:
+                    bedroom_surfaces[surf] = b
+                else:
+                    # Keep the one with simpler name (e.g., 'chambre_1' over 'chambre_1_2')
+                    existing = bedroom_surfaces[surf]
+                    if '_' in b.name_normalized and '_' not in existing.name_normalized:
+                        bedroom_surfaces[surf] = b
+            deduped = list(bedroom_surfaces.values()) + non_bedrooms
+            logger.info(f"  🔄 Removed duplicate bedrooms: {len(bedrooms) - len(bedroom_surfaces)}")
+        
         return deduped
     
     def remove_false_duplicates(self, rooms: List[ExtractedRoom]) -> List[ExtractedRoom]:
@@ -108,7 +131,14 @@ class DeduplicationUtils:
         if diff <= 1.0:
             return rooms
 
-        essential_types = {"wc", "salle_de_bain", "salle_d_eau", "entree", "circulation", "storage"}
+        # Skip multi-apartment filtering - it removes too many rooms
+        return rooms
+
+        # Original filtering disabled:
+        essential_types = {"wc", "salle_de_bain", "salle_d_eau", "entree", "circulation", "storage", "cuisine", "reception",
+                           "salle_de_bain_2", "salle_d_eau_2", "salle_de_bain_3",
+                           "chambre", "chambre_1", "chambre_2", "chambre_3", "chambre_4",
+                           "chambre_1_2", "chambre_2_2", "chambre_3_2"}
         essential_rooms = [r for r in interior if r.name_normalized.split("_")[0] in essential_types]
         
         spatial_rooms = {r.name_normalized for r in rooms if r.source == "spatial"}

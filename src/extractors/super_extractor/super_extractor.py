@@ -857,7 +857,7 @@ class SuperExtractor:
                 raw_pymupdf, "pymupdf_tb", declared_living
             )
             import sys as _sys2
-            print(f"[DBG two-block] rooms_tb={[(r.name_normalized, r.surface, r.source) for r in rooms_tb]}", file=_sys2.stderr)
+            # print(f"[DBG two-block] rooms_tb={[(r.name_normalized, r.surface, r.source) for r in rooms_tb]}", file=_sys2.stderr)
             if rooms_tb:
                 rooms = self._merge_rooms(rooms, rooms_tb)
                 logger.info(f"  📦 Two-block PyMuPDF → {len(rooms)} pièces")
@@ -2529,7 +2529,10 @@ class SuperExtractor:
             return rooms
 
         # Also check for essential rooms that should always be kept
-        essential_types = {"wc", "salle_de_bain", "salle_d_eau", "entree", "circulation", "storage"}
+        essential_types = {"wc", "salle_de_bain", "salle_d_eau", "entree", "circulation", "storage", "cuisine", "reception",
+                           "salle_de_bain_2", "salle_d_eau_2", "salle_de_bain_3",
+                           "chambre", "chambre_1", "chambre_2", "chambre_3", "chambre_4",
+                           "chambre_1_2", "chambre_2_2", "chambre_3_2"}
         essential_rooms = [r for r in interior if r.name_normalized.split("_")[0] in essential_types]
         
         # Identify rooms from spatial extraction (more reliable)

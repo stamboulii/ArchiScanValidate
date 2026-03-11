@@ -44,8 +44,17 @@ class CompositeResolver:
 
                 for ct in child_types:
                     for child in rooms_by_base.get(ct, []):
-                        children.append(child)
-                        children_sum += child.surface
+                        # Only include if child name has no suffix OR suffix is not a number
+                        # This prevents "sejour_2" from matching as child of "reception"
+                        if "_" not in child.name_normalized:
+                            children.append(child)
+                            children_sum += child.surface
+                        else:
+                            suffix = child.name_normalized.split("_", 1)[1]
+                            # Only skip if suffix is purely numeric (like _2, _3)
+                            if not suffix.isdigit():
+                                children.append(child)
+                                children_sum += child.surface
 
                 if not children:
                     continue

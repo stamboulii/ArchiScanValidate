@@ -377,6 +377,7 @@ def _build_parcel_data(result, key=None) -> dict:
         
         # Handle rooms - can be in 'rooms' or 'surfaceDetail' (which is a dict, not list)
         rooms = inner_result.get('rooms', [])
+        
         if not rooms and 'surfaceDetail' in inner_result:
             # surfaceDetail is a dict {name: surface}, convert to list format
             surface_detail_dict = inner_result.get('surfaceDetail', {})
@@ -482,6 +483,29 @@ def _build_surface_detail(rooms: list, result=None) -> dict:
         return surfaces
     
     # Otherwise, use room-based surfaces
+    # Room type to display name mapping
+    TYPE_TO_NAME = {
+        'LIVING_ROOM': 'SEJOUR',
+        'RECEPTION': 'SEJOUR', 
+        'KITCHEN': 'CUISINE',
+        'LIVING_KITCHEN': 'SEJOUR_CUISINE',
+        'ENTRY': 'ENTREE',
+        'BEDROOM': 'CHAMBRE',
+        'BATHROOM': 'SALLE_DE_BAIN',
+        'SHOWER_ROOM': 'SDE',
+        'WC': 'WC',
+        'CIRCULATION': 'CIRCULATION',
+        'STORAGE': 'PLACARD',
+        'DRESSING': 'DRESSING',
+        'BALCONY': 'BALCON',
+        'TERRACE': 'TERRASSE',
+        'GARDEN': 'JARDIN',
+        'LOGGIA': 'LOGGIA',
+        'PATIO': 'PATIO',
+        'PARKING': 'PARKING',
+        'CELLAR': 'CAVE',
+    }
+    
     for room in rooms:
         # Handle both dict and object rooms
         if isinstance(room, dict):
@@ -497,8 +521,32 @@ def _build_surface_detail(rooms: list, result=None) -> dict:
             room_type = room.room_type.name if hasattr(room.room_type, 'name') else str(room.room_type)
             is_exterior = room.is_exterior
         
+        # Map room type to display name
+        display_name = TYPE_TO_NAME.get(room_type, name.upper())
+        
+        # Handle numbered rooms (e.g., CHAMBRE_1, CHAMBRE_2)
+        if hasattr(room, 'room_number') and room.room_number and room.room_number > 0:
+            display_name = f"{display_name}_{room.room_number}"
+        elif '_' in name and name.split('_')[-1].isdigit():
+            # Try to extract number from name like "chambre_1"
+            parts = name.rsplit('_', 1)
+            if parts[0].upper() in [v for k, v in TYPE_TO_NAME.items()]:
+                display_name = f"{parts[0].upper()}_{parts[1]}"
+        
         if not is_exterior and surface and surface > 0:
-            surfaces[f"SURFACE {name.upper()}"] = float(surface)
+            # Don't add SURFACE prefix for TOTAL_HABITABLE/TOTAL_ANNEXE keys
+            if display_name in ('TOTAL_HABITABLE', 'TOTAL_ANNEXE'):
+                surfaces[display_name] = float(surface)
+            else:
+                key = f"SURFACE {display_name}"
+                # Deduplication: skip if more specific version exists
+                base_name = display_name.split('_')[0] if '_' in display_name else display_name
+                
+                # Skip if we already have a numbered version (e.g., skip CHAMBRE if CHAMBRE_1 exists)
+                has_numbered = any(k.startswith(f"SURFACE {base_name}_") for k in surfaces.keys())
+                if has_numbered and not display_name.endswith(tuple('_' + str(i) for i in range(1, 20))):
+                    continue
+                surfaces[key] = float(surface)
     
     # Add total of interior surfaces only (exclude exterior: terrasse, balcon, etc.)
     _EXTERIOR_KEYS = {'TERRASSE', 'BALCON', 'JARDIN', 'LOGGIA', 'PATIO',

@@ -56,8 +56,11 @@ class RoomNormalizer:
              "reception", RoomType.RECEPTION, False),
 
             # ══════════════════════════════════════════
-            # SÉJOUR / SALON
+            # SÉJOUR / SALON - numbered suffixes FIRST (before basic pattern)
             # ══════════════════════════════════════════
+            # Handle SEJOUR_2, SEJOUR_3, etc. (numbered suffixes already in raw name)
+            (r"^(SEJOUR|S[ÉE]JOUR|SALON)_(\d+)$", "sejour_{n}", RoomType.LIVING_ROOM, False),
+            # Basic SEJOUR pattern
             (r"^(SEJOUR|S[ÉE]JOUR|SALON|LIVING|DOUBLE\s*S[ÉE]JOUR|"
             r"SALLE\s*[AÀ]\s*MANGER|SAM|PIECE\s*PRINCIPALE)$",
             "sejour", RoomType.LIVING_ROOM, False),
