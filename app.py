@@ -348,7 +348,7 @@ def transform_to_format(key, lot_data):
         'option': option,
         'surfaceDetail': surface_detail,
         'tva': '',
-        'pinel': False,
+        'pinel': True,
         'state': 'available',
         'customData': None
     }

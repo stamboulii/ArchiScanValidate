@@ -386,6 +386,6 @@ class ExtractionResult:
         # Also update parcelTypeId to "appartment" to match
         if self.property_type in ("appartment", "house"):
             self.property_type = "appartment"  # Update to standard value
-            return "Appartement"
+            return "appartement"
         return {"commercial": "Commerce", "magasin": "Magasin", "office": "Bureau"
-                }.get(self.property_type, "Appartement")
+                }.get(self.property_type, "appartement")

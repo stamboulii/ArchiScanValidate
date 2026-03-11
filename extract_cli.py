@@ -427,13 +427,13 @@ def _build_parcel_data(result, key=None) -> dict:
     if not parcel_type_id:
         if inner_result and hasattr(inner_result, 'get'):
             parcel_type_id = inner_result.get('parcelTypeId', inner_result.get('property_type', 'appartment'))
-            parcel_type_label = inner_result.get('parcelTypeLabel', inner_result.get('property_type', 'Appartement'))
+            parcel_type_label = inner_result.get('parcelTypeLabel', inner_result.get('property_type', 'appartement'))
         elif inner_result and hasattr(inner_result, 'parcelTypeId'):
             parcel_type_id = inner_result.parcelTypeId or inner_result.property_type or 'appartment'
-            parcel_type_label = inner_result.parcelTypeLabel or 'Appartement'
+            parcel_type_label = inner_result.parcelTypeLabel or 'appartement'
     
     parcel_type_id = parcel_type_id or 'appartment'
-    parcel_type_label = parcel_type_label or 'Appartement'
+    parcel_type_label = parcel_type_label or 'appartement'
     
     parcel_data = {
         "parcelLabel": parcel_label,
