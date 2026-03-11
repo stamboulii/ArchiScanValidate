@@ -472,6 +472,25 @@
             gap: 0.5rem;
         }
 
+        .room-section h4.collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .room-section h4.collapsible:hover {
+            opacity: 0.8;
+        }
+
+        .room-section h4 .toggle-icon {
+            margin-left: auto;
+            font-size: 0.75rem;
+            transition: transform 0.2s ease;
+        }
+
+        .room-section-content {
+            display: block;
+        }
+
         .room-item {
             display: flex;
             align-items: center;
@@ -1151,23 +1170,49 @@
 
             // Surface Details (Rooms)
             const surfaceDetail = lotData.surfaceDetail || {};
+
+            // Separate interior and exterior rooms
+            const interiorRooms = ['sejour', 'cuisine', 'sejour_cuisine', 'reception', 'chambre', 'salle_de_bain', 'salle_d_eau', 'wc', 'entree', 'circulation', 'dressing', 'storage', 'cellier', 'buanderie', 'placard'];
+            const exteriorRooms = ['balcon', 'terrasse', 'jardin', 'loggia', 'patio', 'parking', 'garage', 'cave'];
+
+            const interiorItems = {};
+            const exteriorItems = {};
+
+            for (const [roomName, surface] of Object.entries(surfaceDetail)) {
+                const nameLower = roomName.toLowerCase();
+                const isExterior = exteriorRooms.some(ext => nameLower.includes(ext.toLowerCase()));
+                if (isExterior || nameLower === 'total_annexe') {
+                    exteriorItems[roomName] = surface;
+                } else if (nameLower !== 'total_habitable') {
+                    interiorItems[roomName] = surface;
+                }
+            }
+
+            // Interior Rooms Section
             html += `
                 <div class="room-section">
-                    <h4>
+                    <h4 class="collapsible" onclick="toggleSection('interiorRoomsSection')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                             <polyline points="9 22 9 12 15 12 15 22"></polyline>
                         </svg>
-                        Pièces
+                        Pièces Intérieures
+                        <span class="toggle-icon" id="interiorToggleIcon">▼</span>
                     </h4>
-                    <div id="roomsContainer">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <input type="checkbox" id="includeInterior" checked style="width: 16px; height: 16px;" onchange="updateJSONPreview()">
+                        <label for="includeInterior" style="font-size: 0.8rem; color: #888;">Inclure dans JSON</label>
+                    </div>
+                    <div id="interiorRoomsSection" class="room-section-content">
+                        <div id="interiorRoomsContainer">
             `;
 
-            // Add rooms
+            // Add interior rooms
             const roomLabels = {
                 'sejour_cuisine': 'Séjour/Cuisine',
                 'sejour': 'Séjour',
                 'cuisine': 'Cuisine',
+                'reception': 'Réception',
                 'chambre_1': 'Chambre 1',
                 'chambre_2': 'Chambre 2',
                 'chambre_3': 'Chambre 3',
@@ -1179,13 +1224,30 @@
                 'circulation': 'Circulation',
                 'dressing': 'Dressing',
                 'storage': 'Stockage',
-                'cellier': 'Cellier'
+                'cellier': 'Cellier',
+                'buanderie': 'Buanderie',
+                'placard': 'Placard',
+                // Exterior rooms
+                'balcon': 'Balcon',
+                'balcon_1': 'Balcon 1',
+                'balcon_2': 'Balcon 2',
+                'terrasse': 'Terrasse',
+                'terrasse_1': 'Terrasse 1',
+                'terrasse_2': 'Terrasse 2',
+                'jardin': 'Jardin',
+                'loggia': 'Loggia',
+                'patio': 'Patio',
+                'parking': 'Parking',
+                'parking_1': 'Parking 1',
+                'parking_2': 'Parking 2',
+                'garage': 'Garage',
+                'cave': 'Cave'
             };
 
-            for (const [roomName, surface] of Object.entries(surfaceDetail)) {
-                const displayName = roomLabels[roomName] || roomName;
+            for (const [roomName, surface] of Object.entries(interiorItems)) {
+                const displayName = roomLabels[roomName.toLowerCase()] || roomName;
                 html += `
-                    <div class="room-item" data-room="${roomName}">
+                    <div class="room-item" data-room="${roomName}" data-type="interior">
                         <input type="text" value="${displayName}" placeholder="Nom de la pièce">
                         <input type="number" step="0.01" value="${surface}" placeholder="Surface">
                         <button class="remove-btn" onclick="removeRoom(this)">
@@ -1200,13 +1262,64 @@
 
             html += `
                     </div>
-                    <button class="btn btn-secondary" style="margin-top: 0.75rem; width: 100%;" onclick="addRoom()">
+                    <button class="btn btn-secondary" style="margin-top: 0.5rem; width: 100%;" onclick="addRoom('interior')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
                         Ajouter une pièce
                     </button>
+                    </div>
+                </div>
+            `;
+
+            // Exterior Spaces Section
+            html += `
+                <div class="room-section">
+                    <h4 class="collapsible" onclick="toggleSection('exteriorRoomsSection')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                        Espaces Extérieurs
+                        <span class="toggle-icon" id="exteriorToggleIcon">▼</span>
+                    </h4>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <input type="checkbox" id="includeExterior" checked style="width: 16px; height: 16px;" onchange="updateJSONPreview()">
+                        <label for="includeExterior" style="font-size: 0.8rem; color: #888;">Inclure dans JSON</label>
+                    </div>
+                    <div id="exteriorRoomsSection" class="room-section-content">
+                        <div id="exteriorRoomsContainer">
+            `;
+
+            // Add exterior rooms
+            for (const [roomName, surface] of Object.entries(exteriorItems)) {
+                const displayName = roomLabels[roomName.toLowerCase()] || roomName;
+                html += `
+                    <div class="room-item" data-room="${roomName}" data-type="exterior">
+                        <input type="text" value="${displayName}" placeholder="Nom de l'espace">
+                        <input type="number" step="0.01" value="${surface}" placeholder="Surface">
+                        <button class="remove-btn" onclick="removeRoom(this)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            }
+
+            html += `
+                    </div>
+                    <button class="btn btn-secondary" style="margin-top: 0.5rem; width: 100%;" onclick="addRoom('exterior')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Ajouter un espace
+                    </button>
+                    </div>
                 </div>
             `;
 
@@ -1312,12 +1425,15 @@
         }
 
         // Add room
-        function addRoom() {
-            const container = document.getElementById('roomsContainer');
+        function addRoom(type = 'interior') {
+            const containerId = type === 'exterior' ? 'exteriorRoomsContainer' : 'interiorRoomsContainer';
+            const container = document.getElementById(containerId);
+            const placeholder = type === 'exterior' ? 'Nom de l\'espace' : 'Nom de la pièce';
             const div = document.createElement('div');
             div.className = 'room-item';
+            div.setAttribute('data-type', type);
             div.innerHTML = `
-                <input type="text" value="" placeholder="Nom de la pièce">
+                <input type="text" value="" placeholder="${placeholder}">
                 <input type="number" step="0.01" value="" placeholder="Surface">
                 <button class="remove-btn" onclick="removeRoom(this)">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1332,6 +1448,18 @@
         // Remove room
         function removeRoom(btn) {
             btn.parentElement.remove();
+        }
+
+        // Toggle section visibility
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                if (section.style.display === 'none') {
+                    section.style.display = 'block';
+                } else {
+                    section.style.display = 'none';
+                }
+            }
         }
 
         // Add custom field
@@ -1382,29 +1510,44 @@
             let habitableSum = 0;
             let annexeSum = 0;
 
-            const exteriorTypes = ['balcon', 'terrasse', 'jardin', 'loggia', 'parking', 'garage', 'cave', 'cellier'];
+            const includeInterior = document.getElementById('includeInterior')?.checked ?? true;
+            const includeExterior = document.getElementById('includeExterior')?.checked ?? true;
 
-            const roomItems = document.querySelectorAll('#roomsContainer .room-item');
-            roomItems.forEach(item => {
-                const inputs = item.querySelectorAll('input');
-                const name = inputs[0].value.trim().toUpperCase().replace(/\s+/g, '_');
-                const surface = parseFloat(inputs[1].value) || 0;
-                if (name && surface > 0) {
-                    surfaceDetail[name] = surface;
-                    // Check if exterior
-                    const nameLower = name.toLowerCase();
-                    const isExterior = exteriorTypes.some(ext => nameLower.includes(ext.toLowerCase()));
-                    if (isExterior) {
-                        annexeSum += surface;
-                    } else {
+            // Collect interior rooms (only if checkbox is checked)
+            if (includeInterior) {
+                const interiorItems = document.querySelectorAll('#interiorRoomsContainer .room-item');
+                interiorItems.forEach(item => {
+                    const inputs = item.querySelectorAll('input');
+                    const name = inputs[0].value.trim().toUpperCase().replace(/\s+/g, '_');
+                    const surface = parseFloat(inputs[1].value) || 0;
+                    if (name && surface > 0) {
+                        surfaceDetail[name] = surface;
                         habitableSum += surface;
                     }
-                }
-            });
+                });
+            }
 
-            // Add totals
-            surfaceDetail['TOTAL_HABITABLE'] = Math.round(habitableSum * 100) / 100;
-            surfaceDetail['TOTAL_ANNEXE'] = Math.round(annexeSum * 100) / 100;
+            // Collect exterior rooms (only if checkbox is checked)
+            if (includeExterior) {
+                const exteriorItems = document.querySelectorAll('#exteriorRoomsContainer .room-item');
+                exteriorItems.forEach(item => {
+                    const inputs = item.querySelectorAll('input');
+                    const name = inputs[0].value.trim().toUpperCase().replace(/\s+/g, '_');
+                    const surface = parseFloat(inputs[1].value) || 0;
+                    if (name && surface > 0) {
+                        surfaceDetail[name] = surface;
+                        annexeSum += surface;
+                    }
+                });
+            }
+
+            // Add totals (only if their section is included)
+            if (includeInterior) {
+                surfaceDetail['TOTAL_HABITABLE'] = Math.round(habitableSum * 100) / 100;
+            }
+            if (includeExterior) {
+                surfaceDetail['TOTAL_ANNEXE'] = Math.round(annexeSum * 100) / 100;
+            }
 
             // Build corrected data in desired format
             const corrected = {
@@ -1432,32 +1575,6 @@
                 state: document.getElementById('field_state').value,
                 customData: null
             };
-
-            // Add option values to surfaceDetail if checked
-            if (document.getElementById('opt_balcony').checked) {
-                const val = parseFloat(document.getElementById('val_balcony').value);
-                if (val) surfaceDetail['BALCON'] = val;
-            }
-            if (document.getElementById('opt_terrace').checked) {
-                const val = parseFloat(document.getElementById('val_terrace').value);
-                if (val) surfaceDetail['TERRASSE'] = val;
-            }
-            if (document.getElementById('opt_garden').checked) {
-                const val = parseFloat(document.getElementById('val_garden').value);
-                if (val) surfaceDetail['JARDIN'] = val;
-            }
-            if (document.getElementById('opt_loggia').checked) {
-                const val = parseFloat(document.getElementById('val_loggia').value);
-                if (val) surfaceDetail['LOGGIA'] = val;
-            }
-            if (document.getElementById('opt_parking').checked) {
-                const val = parseFloat(document.getElementById('val_parking').value);
-                if (val) surfaceDetail['PARKING'] = val;
-            }
-            if (document.getElementById('opt_garage').checked) {
-                const val = parseFloat(document.getElementById('val_garage').value);
-                if (val) surfaceDetail['GARAGE'] = val;
-            }
 
             // Save corrected data to JavaScript memory
             extractionData[file.file_id] = {

@@ -8,6 +8,7 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 import logging
@@ -127,50 +128,61 @@ def upload_files():
     if not files or all(f.filename == '' for f in files):
         return jsonify({'error': 'No files selected'}), 400
     
-    results = []
-    
+    # First, save all files to disk
+    saved_files = []
     for file in files:
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-            
-            # Check if file already exists in cache (for re-import after delete)
-            existing_file_id = None
-            for fid, fdata in extraction_cache.items():
-                if fdata['filename'] == filename:
-                    existing_file_id = fid
-                    break
-            
-            # Extract data
-            extraction_data = extract_pdf(filepath)
-            
-            if existing_file_id:
-                # Update existing entry (re-import)
-                file_id = existing_file_id
-                extraction_cache[file_id] = {
-                    'filename': filename,
-                    'filepath': filepath,
-                    'data': extraction_data,
-                    'corrected': None,
-                    'deleted': False
-                }
-            else:
-                # Create new entry
-                file_id = f"file_{len(extraction_cache)}"
-                extraction_cache[file_id] = {
-                    'filename': filename,
-                    'filepath': filepath,
-                    'data': extraction_data,
-                    'corrected': None,
-                    'deleted': False
-                }
-            
-            results.append({
-                'file_id': file_id,
+            saved_files.append((filename, filepath))
+    
+    # Process extractions in parallel
+    def process_file(args):
+        filename, filepath = args
+        # Check if file already exists in cache
+        existing_file_id = None
+        for fid, fdata in extraction_cache.items():
+            if fdata['filename'] == filename:
+                existing_file_id = fid
+                break
+        
+        # Extract data
+        extraction_data = extract_pdf(filepath)
+        
+        return filename, filepath, extraction_data, existing_file_id
+    
+    # Use ThreadPoolExecutor for parallel extraction
+    results = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        extractions = list(executor.map(process_file, saved_files))
+    
+    # Update cache with results
+    for filename, filepath, extraction_data, existing_file_id in extractions:
+        if existing_file_id:
+            file_id = existing_file_id
+            extraction_cache[file_id] = {
                 'filename': filename,
-                'data': extraction_data
-            })
+                'filepath': filepath,
+                'data': extraction_data,
+                'corrected': None,
+                'deleted': False
+            }
+        else:
+            file_id = f"file_{len(extraction_cache)}"
+            extraction_cache[file_id] = {
+                'filename': filename,
+                'filepath': filepath,
+                'data': extraction_data,
+                'corrected': None,
+                'deleted': False
+            }
+        
+        results.append({
+            'file_id': file_id,
+            'filename': filename,
+            'data': extraction_data
+        })
     
     return jsonify({
         'success': True,
