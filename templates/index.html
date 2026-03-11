@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArchiScan - Extraction & Vérification</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --secondary: #10B981;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --bg-dark: #0F172A;
+            --bg-card: #1E293B;
+            --bg-input: #334155;
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --border: #475569;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #7C3AED 100%);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header h1 svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            padding: 2rem;
+            background: var(--bg-card);
+            margin: 1.5rem;
+            border-radius: 1rem;
+            border: 2px dashed var(--border);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: var(--primary);
+            background: rgba(79, 70, 229, 0.1);
+        }
+
+        .upload-section.dragover {
+            border-color: var(--primary);
+            background: rgba(79, 70, 229, 0.15);
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            color: var(--primary);
+        }
+
+        .upload-section h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-section p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* Gallery / File List */
+        .gallery-section {
+            padding: 0 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .gallery-header h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .file-counter {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
+        .file-card {
+            background: var(--bg-card);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+            position: relative;
+        }
+
+        .file-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .file-card.active {
+            border-color: var(--primary);
+            background: rgba(79, 70, 229, 0.15);
+        }
+
+        .file-card.confirmed {
+            border-color: var(--secondary);
+        }
+
+        .file-card .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(239, 68, 68, 0.9);
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+
+        .file-card:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .file-card .delete-btn:hover {
+            background: var(--danger);
+        }
+
+        .file-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 0.75rem;
+            color: var(--danger);
+        }
+
+        .file-name {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            text-align: center;
+            word-break: break-word;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-status {
+            font-size: 0.75rem;
+            text-align: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            display: inline-block;
+        }
+
+        .file-status.pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .file-status.corrected {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--secondary);
+        }
+
+        /* Main Content - Split View */
+        .main-content {
+            display: none;
+            padding: 0 1.5rem 1.5rem;
+            gap: 1.5rem;
+        }
+
+        .main-content.visible {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content.visible {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* PDF Viewer */
+        .pdf-viewer {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 600px;
+        }
+
+        .pdf-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pdf-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .pdf-navigation {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pdf-navigation button {
+            background: var(--bg-input);
+            border: none;
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .pdf-navigation button:hover:not(:disabled) {
+            background: var(--primary);
+        }
+
+        .pdf-navigation button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .pdf-counter {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .pdf-container {
+            flex: 1;
+            overflow: auto;
+            background: #525659;
+            padding: 1rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .pdf-container embed {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+            border-radius: 0.5rem;
+        }
+
+        /* Form Section */
+        .form-section {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            /* max-height: 700px; */
+        }
+
+        .form-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .form-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .form-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .form-section::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .form-section::-webkit-scrollbar-track {
+            background: var(--bg-input);
+        }
+
+        .form-section::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        /* Form Groups */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.375rem;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.9375rem;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 640px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Room Details */
+        .room-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .room-section h4 {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .room-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem;
+            background: var(--bg-input);
+            border-radius: 0.5rem;
+        }
+
+        .room-item input[type="text"] {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .room-item input[type="number"] {
+            width: 100px;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .room-item .remove-btn {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            padding: 0.25rem;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .room-item .remove-btn:hover {
+            opacity: 1;
+        }
+
+        /* Options */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        @media (max-width: 640px) {
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .option-item {
+            background: var(--bg-input);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .option-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .option-item label {
+            flex: 1;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .option-item input[type="number"] {
+            width: 80px;
+            padding: 0.375rem 0.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem;
+        }
+
+        .option-item input[type="number"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Validation Section */
+        .validation-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .validation-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .validation-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .validation-badge.valid {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--secondary);
+        }
+
+        .validation-badge.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .validation-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        /* Form Actions */
+        .form-actions {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-shrink: 0;
+        }
+
+        .form-actions .left {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .form-actions .right {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 9999;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            margin-top: 0.75rem;
+            box-shadow: var(--shadow);
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .toast.success {
+            border-color: var(--secondary);
+        }
+
+        .toast.error {
+            border-color: var(--danger);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            ArchiScan
+        </h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" id="addMoreFilesBtn" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Ajouter des fichiers
+            </button>
+            <button class="btn btn-secondary" id="downloadAllBtn" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download JSON
+            </button>
+        </div>
+    </header>
+
+    <!-- Upload Section -->
+    <section class="upload-section" id="uploadSection">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <h2>Upload vos fichiers PDF</h2>
+        <p>Sélectionnez un PDF unique, un PDF multi-pages, ou un dossier contenant plusieurs PDFs</p>
+        <input type="file" id="fileInput" class="file-input" multiple accept=".pdf">
+        <input type="file" id="folderInput" class="file-input" webkitdirectory multiple accept=".pdf">
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                Choisir Fichiers
+            </button>
+            <button class="btn btn-secondary" onclick="document.getElementById('folderInput').click()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Choisir Dossier
+            </button>
+        </div>
+    </section>
+
+    <!-- Loading State -->
+    <div class="loading hidden" id="loadingState">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Gallery Section -->
+    <section class="gallery-section hidden" id="gallerySection">
+        <div class="gallery-header">
+            <h3>Fichiers importés</h3>
+            <span class="file-counter" id="fileCounter">0 fichiers</span>
+        </div>
+        <div class="gallery" id="gallery"></div>
+    </section>
+
+    <!-- Main Content - Split View -->
+    <main class="main-content" id="mainContent">
+        <!-- PDF Viewer -->
+        <div class="pdf-viewer">
+            <div class="pdf-header">
+                <h3>Visualisation PDF</h3>
+                <div class="pdf-navigation">
+                    <button id="prevPdf" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <span class="pdf-counter" id="pdfCounter">1 / 1</span>
+                    <button id="nextPdf" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="pdf-container" id="pdfContainer">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <h3>Aucun PDF sélectionné</h3>
+                    <p>Sélectionnez un fichier dans la galerie</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extraction Form -->
+        <div class="form-section">
+            <div class="form-header">
+                <h3>Données Extraites</h3>
+                <button class="btn btn-secondary" id="addFieldBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Ajouter Champ
+                </button>
+            </div>
+            <div class="form-scroll" id="formContainer">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    <h3>Aucune donnée</h3>
+                    <p>Sélectionnez un fichier pour voir les données extraites</p>
+                </div>
+            </div>
+            <div class="form-actions">
+                <div class="left">
+                    <button class="btn btn-danger" id="clearBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                            </path>
+                        </svg>
+                        Effacer
+                    </button>
+                </div>
+                <div class="right">
+                    <button class="btn btn-success" id="confirmBtn" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        Confirmer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // Global State
+        let files = [];
+        let currentIndex = 0;
+        let extractionData = {};
+        let customFields = [];
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+        const addMoreFilesBtn = document.getElementById('addMoreFilesBtn');
+        const uploadSection = document.getElementById('uploadSection');
+        const gallerySection = document.getElementById('gallerySection');
+        const gallery = document.getElementById('gallery');
+        const mainContent = document.getElementById('mainContent');
+        const formContainer = document.getElementById('formContainer');
+        const pdfContainer = document.getElementById('pdfContainer');
+        const prevPdf = document.getElementById('prevPdf');
+        const nextPdf = document.getElementById('nextPdf');
+        const pdfCounter = document.getElementById('pdfCounter');
+        const fileCounter = document.getElementById('fileCounter');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const loadingState = document.getElementById('loadingState');
+
+        // File Input Handlers
+        fileInput.addEventListener('change', handleFileSelect);
+        folderInput.addEventListener('change', handleFileSelect);
+
+        // Add more files button
+        addMoreFilesBtn.addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        function handleFileSelect(e) {
+            const selectedFiles = e.target.files;
+            if (selectedFiles.length > 0) {
+                uploadFiles(selectedFiles);
+            }
+            // Reset inputs
+            fileInput.value = '';
+            folderInput.value = '';
+        }
+
+        async function uploadFiles(fileList) {
+            showLoading(true);
+
+            const formData = new FormData();
+            for (let i = 0; i < fileList.length; i++) {
+                formData.append('files', fileList[i]);
+            }
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Fetch all files from server (including existing ones)
+                    const filesResponse = await fetch('/api/files');
+                    const filesResult = await filesResponse.json();
+
+                    if (filesResult.success) {
+                        files = filesResult.files;
+                        currentIndex = 0;
+                        updateGallery();
+                        updatePDFCounter();
+
+                        // Show add more files button after first upload
+                        addMoreFilesBtn.style.display = 'inline-flex';
+
+                        if (files.length > 0) {
+                            loadFile(0);
+                        }
+
+                        showToast('success', `${files.length} fichier(s) importé(s) avec succès`);
+                    }
+                } else {
+                    showToast('error', result.error || 'Erreur lors de l\'importation');
+                }
+            } catch (error) {
+                showToast('error', 'Erreur de connexion au serveur');
+                console.error(error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showLoading(show) {
+            if (show) {
+                loadingState.classList.remove('hidden');
+                uploadSection.classList.add('hidden');
+            } else {
+                loadingState.classList.add('hidden');
+            }
+        }
+
+        function updateGallery() {
+            gallerySection.classList.remove('hidden');
+            gallery.innerHTML = '';
+
+            files.forEach((file, index) => {
+                const card = document.createElement('div');
+                card.className = 'file-card' + (index === currentIndex ? ' active' : '');
+                card.onclick = (e) => {
+                    if (!e.target.closest('.delete-btn')) {
+                        loadFile(index);
+                    }
+                };
+
+                const isCorrected = extractionData[file.file_id] && extractionData[file.file_id].corrected;
+
+                card.innerHTML = `
+                    <button class="delete-btn" onclick="deleteFile(event, ${index})" title="Supprimer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                    <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <div class="file-name">${file.filename}</div>
+                    <span class="file-status ${isCorrected ? 'corrected' : 'pending'}">
+                        ${isCorrected ? '✓ Corrigé' : '○ En attente'}
+                    </span>
+                `;
+
+                gallery.appendChild(card);
+            });
+
+            fileCounter.textContent = `${files.length} fichier(s)`;
+            downloadAllBtn.disabled = files.length === 0;
+        }
+
+        // Delete individual file
+        async function deleteFile(event, index) {
+            event.stopPropagation();
+            if (confirm('Voulez-vous supprimer ce fichier ?')) {
+                const file = files[index];
+
+                // Mark as deleted on server
+                try {
+                    await fetch('/api/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileId: file.file_id })
+                    });
+                } catch (e) {
+                    console.error('Failed to delete on server:', e);
+                }
+
+                files.splice(index, 1);
+                if (currentIndex >= files.length) {
+                    currentIndex = Math.max(0, files.length - 1);
+                }
+                if (files.length > 0) {
+                    loadFile(currentIndex);
+                } else {
+                    mainContent.classList.remove('visible');
+                }
+                updateGallery();
+                showToast('success', 'Fichier supprimé');
+            }
+        }
+
+        function loadFile(index) {
+            currentIndex = index;
+            const file = files[index];
+
+            // Update gallery active state
+            document.querySelectorAll('.file-card').forEach((card, i) => {
+                card.classList.toggle('active', i === index);
+            });
+
+            // Update PDF viewer
+            pdfContainer.innerHTML = `<embed src="/api/file/${file.file_id}" type="application/pdf">`;
+
+            // Load extraction data
+            loadExtractionForm(file);
+            updatePDFCounter();
+        }
+
+        function updatePDFCounter() {
+            pdfCounter.textContent = `${currentIndex + 1} / ${files.length}`;
+            prevPdf.disabled = currentIndex === 0;
+            nextPdf.disabled = currentIndex === files.length - 1;
+        }
+
+        prevPdf.addEventListener('click', () => {
+            if (currentIndex > 0) {
+                loadFile(currentIndex - 1);
+            }
+        });
+
+        nextPdf.addEventListener('click', () => {
+            if (currentIndex < files.length - 1) {
+                loadFile(currentIndex + 1);
+            }
+        });
+
+        function loadExtractionForm(file) {
+            const data = file.data;
+            extractionData[file.file_id] = { original: data, corrected: null };
+
+            // Show main content
+            mainContent.classList.add('visible');
+
+            // Build form
+            let html = '';
+
+            // Get the lot reference (first key in data)
+            const lotRef = Object.keys(data)[0];
+            const lotData = data[lotRef] || {};
+            const key = extractLotReference(file.filename);
+
+            // Basic Info
+            html += `
+                <div class="form-group">
+                    <label>Référence Lot</label>
+                    <input type="text" id="field_reference" value="${key}">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type de Bien</label>
+                        <select id="field_property_type">
+                            <option value="appartment" ${(lotData.parcelTypeId || '') === 'appartment' ? 'selected' : ''}>Appartement</option>
+                            <option value="house" ${(lotData.parcelTypeId || '') === 'house' ? 'selected' : ''}>Maison</option>
+                            <option value="magasin" ${(lotData.parcelTypeId || '') === 'magasin' ? 'selected' : ''}>Magasin</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Orientation</label>
+                        <input type="text" id="field_orientation" value="" placeholder="N, S, E, O...">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Typologie</label>
+                        <input type="text" id="field_typology" value="${lotData.typology || ''}" placeholder="T2, T3, etc.">
+                    </div>
+                    <div class="form-group">
+                        <label>Étage</label>
+                        <input type="text" id="field_floor" value="${lotData.floor || ''}" placeholder="RDC, 1, 2...">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Surface Habitable (m²)</label>
+                        <input type="number" step="0.01" id="field_living_space" value="${lotData.living_space || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label>État</label>
+                        <select id="field_state">
+                            <option value="available">Disponible</option>
+                            <option value="reserved">Réservé</option>
+                            <option value="sold">Vendu</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+
+            // Surface Details (Rooms)
+            const surfaceDetail = lotData.surfaceDetail || {};
+            html += `
+                <div class="room-section">
+                    <h4>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        Pièces
+                    </h4>
+                    <div id="roomsContainer">
+            `;
+
+            // Add rooms
+            const roomLabels = {
+                'sejour_cuisine': 'Séjour/Cuisine',
+                'sejour': 'Séjour',
+                'cuisine': 'Cuisine',
+                'chambre_1': 'Chambre 1',
+                'chambre_2': 'Chambre 2',
+                'chambre_3': 'Chambre 3',
+                'chambre': 'Chambre',
+                'salle_de_bain': 'Salle de bain',
+                'salle_d_eau': 'Salle d\'eau',
+                'wc': 'WC',
+                'entree': 'Entrée',
+                'circulation': 'Circulation',
+                'dressing': 'Dressing',
+                'storage': 'Stockage',
+                'cellier': 'Cellier'
+            };
+
+            for (const [roomName, surface] of Object.entries(surfaceDetail)) {
+                const displayName = roomLabels[roomName] || roomName;
+                html += `
+                    <div class="room-item" data-room="${roomName}">
+                        <input type="text" value="${displayName}" placeholder="Nom de la pièce">
+                        <input type="number" step="0.01" value="${surface}" placeholder="Surface">
+                        <button class="remove-btn" onclick="removeRoom(this)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            }
+
+            html += `
+                    </div>
+                    <button class="btn btn-secondary" style="margin-top: 0.75rem; width: 100%;" onclick="addRoom()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Ajouter une pièce
+                    </button>
+                </div>
+            `;
+
+            // Options
+            const option = lotData.option || {};
+            html += `
+                <div class="room-section">
+                    <h4>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                        Options Extérieures
+                    </h4>
+                    <div class="options-grid">
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_balcony" ${option.balcony ? 'checked' : ''} onchange="toggleOptionValue('balcony')">
+                            <label for="opt_balcony">Balcon</label>
+                            <input type="number" step="0.01" id="val_balcony" placeholder="m²" ${!option.balcony ? 'disabled' : ''} value="${option.balcony || ''}">
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_terrace" ${option.terrace ? 'checked' : ''} onchange="toggleOptionValue('terrace')">
+                            <label for="opt_terrace">Terrasse</label>
+                            <input type="number" step="0.01" id="val_terrace" placeholder="m²" ${!option.terrace ? 'disabled' : ''} value="${option.terrace || ''}">
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_garden" ${option.garden ? 'checked' : ''} onchange="toggleOptionValue('garden')">
+                            <label for="opt_garden">Jardin</label>
+                            <input type="number" step="0.01" id="val_garden" placeholder="m²" ${!option.garden ? 'disabled' : ''} value="${option.garden || ''}">
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_loggia" ${option.loggia ? 'checked' : ''} onchange="toggleOptionValue('loggia')">
+                            <label for="opt_loggia">Loggia</label>
+                            <input type="number" step="0.01" id="val_loggia" placeholder="m²" ${!option.loggia ? 'disabled' : ''} value="${option.loggia || ''}">
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_parking" ${option.parking ? 'checked' : ''} onchange="toggleOptionValue('parking')">
+                            <label for="opt_parking">Parking</label>
+                            <input type="number" step="0.01" id="val_parking" placeholder="m²" ${!option.parking ? 'disabled' : ''} value="${option.parking || ''}">
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt_garage" ${option.garage ? 'checked' : ''} onchange="toggleOptionValue('garage')">
+                            <label for="opt_garage">Garage</label>
+                            <input type="number" step="0.01" id="val_garage" placeholder="m²" ${!option.garage ? 'disabled' : ''} value="${option.garage || ''}">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Validation Info
+            const validation = lotData._validation || {};
+            if (validation.is_valid !== undefined) {
+                html += `
+                    <div class="validation-section">
+                        <div class="validation-title">Validation</div>
+                        <span class="validation-badge ${validation.is_valid ? 'valid' : 'error'}">
+                            ${validation.is_valid ? '✓ Valide' : '✗ Invalide'}
+                        </span>
+                        ${validation.errors && validation.errors.length > 0 ? `
+                            <div style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--danger);">
+                                ${validation.errors.join('<br>')}
+                            </div>
+                        ` : ''}
+                        ${validation.warnings && validation.warnings.length > 0 ? `
+                            <div style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--warning);">
+                                ${validation.warnings.join('<br>')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // Custom Fields Section
+            html += `
+                <div class="room-section" id="customFieldsSection" style="display: none;">
+                    <h4>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="16"></line>
+                            <line x1="8" y1="12" x2="16" y2="12"></line>
+                        </svg>
+                        Champs Personnalisés
+                    </h4>
+                    <div id="customFieldsContainer"></div>
+                </div>
+            `;
+
+            formContainer.innerHTML = html;
+            confirmBtn.disabled = false;
+        }
+
+        // Toggle option value input
+        function toggleOptionValue(option) {
+            const checkbox = document.getElementById(`opt_${option}`);
+            const input = document.getElementById(`val_${option}`);
+            if (checkbox && input) {
+                input.disabled = !checkbox.checked;
+                if (!checkbox.checked) {
+                    input.value = '';
+                }
+            }
+        }
+
+        // Add room
+        function addRoom() {
+            const container = document.getElementById('roomsContainer');
+            const div = document.createElement('div');
+            div.className = 'room-item';
+            div.innerHTML = `
+                <input type="text" value="" placeholder="Nom de la pièce">
+                <input type="number" step="0.01" value="" placeholder="Surface">
+                <button class="remove-btn" onclick="removeRoom(this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        // Remove room
+        function removeRoom(btn) {
+            btn.parentElement.remove();
+        }
+
+        // Add custom field
+        document.getElementById('addFieldBtn').addEventListener('click', () => {
+            const section = document.getElementById('customFieldsSection');
+            const container = document.getElementById('customFieldsContainer');
+
+            section.style.display = 'block';
+
+            const div = document.createElement('div');
+            div.className = 'room-item';
+            div.innerHTML = `
+                <input type="text" value="" placeholder="Nom du champ">
+                <input type="text" value="" placeholder="Valeur">
+                <button class="remove-btn" onclick="removeRoom(this); updateCustomFields();">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            `;
+            container.appendChild(div);
+        });
+
+        // Extract lot reference from filename
+        function extractLotReference(filename) {
+            // Try to find pattern like CS001, A101, etc. in filename
+            // Common patterns: PDV-CS001, _CS001_, -CS001-, etc.
+            const matches = filename.match(/(?:PDV[-_]?|[_-])?([A-Z]+\d+[A-Z]?)(?:[-_]|\.pdf)/i);
+            if (matches && matches[1]) {
+                return matches[1].toUpperCase();
+            }
+            // Fallback: remove .pdf and common prefixes
+            return filename.replace(/\.pdf$/i, '')
+                .replace(/^\d+[._-]/, '')  // Remove date prefix
+                .replace(/_PLN_?$/, '')    // Remove _PLN_ suffix
+                .replace(/_/g, '');
+        }
+
+        // Confirm button
+        confirmBtn.addEventListener('click', async () => {
+            const file = files[currentIndex];
+            const userReference = document.getElementById('field_reference').value.trim();
+            const key = userReference || extractLotReference(file.filename);
+
+            // Collect room surfaces and calculate totals
+            const surfaceDetail = {};
+            let habitableSum = 0;
+            let annexeSum = 0;
+
+            const exteriorTypes = ['balcon', 'terrasse', 'jardin', 'loggia', 'parking', 'garage', 'cave', 'cellier'];
+
+            const roomItems = document.querySelectorAll('#roomsContainer .room-item');
+            roomItems.forEach(item => {
+                const inputs = item.querySelectorAll('input');
+                const name = inputs[0].value.trim().toUpperCase().replace(/\s+/g, '_');
+                const surface = parseFloat(inputs[1].value) || 0;
+                if (name && surface > 0) {
+                    surfaceDetail[name] = surface;
+                    // Check if exterior
+                    const nameLower = name.toLowerCase();
+                    const isExterior = exteriorTypes.some(ext => nameLower.includes(ext.toLowerCase()));
+                    if (isExterior) {
+                        annexeSum += surface;
+                    } else {
+                        habitableSum += surface;
+                    }
+                }
+            });
+
+            // Add totals
+            surfaceDetail['TOTAL_HABITABLE'] = Math.round(habitableSum * 100) / 100;
+            surfaceDetail['TOTAL_ANNEXE'] = Math.round(annexeSum * 100) / 100;
+
+            // Build corrected data in desired format
+            const corrected = {
+                parcelLabel: document.getElementById('field_reference').value,
+                parcelTypeId: document.getElementById('field_property_type').value,
+                parcelTypeLabel: document.getElementById('field_property_type').value === 'magasin' ? 'Magasin' : document.getElementById('field_property_type').options[document.getElementById('field_property_type').selectedIndex].text,
+                orientation: document.getElementById('field_orientation').value,
+                typology: document.getElementById('field_typology').value,
+                floor: document.getElementById('field_floor').value,
+                price: 'N.C',
+                living_space: document.getElementById('field_living_space').value,
+                option: {
+                    balcony: document.getElementById('opt_balcony').checked,
+                    terrace: document.getElementById('opt_terrace').checked,
+                    garden: document.getElementById('opt_garden').checked,
+                    loggia: document.getElementById('opt_loggia').checked,
+                    duplex: false,
+                    parking: document.getElementById('opt_parking').checked,
+                    garage: document.getElementById('opt_garage').checked,
+                    'winter garden': false
+                },
+                surfaceDetail: surfaceDetail,
+                tva: '',
+                pinel: false,
+                state: document.getElementById('field_state').value,
+                customData: null
+            };
+
+            // Add option values to surfaceDetail if checked
+            if (document.getElementById('opt_balcony').checked) {
+                const val = parseFloat(document.getElementById('val_balcony').value);
+                if (val) surfaceDetail['BALCON'] = val;
+            }
+            if (document.getElementById('opt_terrace').checked) {
+                const val = parseFloat(document.getElementById('val_terrace').value);
+                if (val) surfaceDetail['TERRASSE'] = val;
+            }
+            if (document.getElementById('opt_garden').checked) {
+                const val = parseFloat(document.getElementById('val_garden').value);
+                if (val) surfaceDetail['JARDIN'] = val;
+            }
+            if (document.getElementById('opt_loggia').checked) {
+                const val = parseFloat(document.getElementById('val_loggia').value);
+                if (val) surfaceDetail['LOGGIA'] = val;
+            }
+            if (document.getElementById('opt_parking').checked) {
+                const val = parseFloat(document.getElementById('val_parking').value);
+                if (val) surfaceDetail['PARKING'] = val;
+            }
+            if (document.getElementById('opt_garage').checked) {
+                const val = parseFloat(document.getElementById('val_garage').value);
+                if (val) surfaceDetail['GARAGE'] = val;
+            }
+
+            // Save corrected data to JavaScript memory
+            extractionData[file.file_id] = {
+                original: file.data,
+                corrected: corrected
+            };
+
+            // Also save to server so it persists for download
+            try {
+                await fetch('/api/corrected', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileId: file.file_id,
+                        correctedData: corrected
+                    })
+                });
+            } catch (e) {
+                console.error('Failed to save to server:', e);
+            }
+
+            // Update gallery
+            updateGallery();
+            showToast('success', 'Données confirmées');
+        });
+
+        // Download all - only confirmed files
+        downloadAllBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ includeUncorrected: false })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'extraction_results.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('success', 'JSON téléchargé');
+                } else {
+                    showToast('error', 'Erreur lors du téléchargement');
+                }
+            } catch (error) {
+                showToast('error', 'Erreur de connexion');
+            }
+        });
+
+        // Clear all
+        clearBtn.addEventListener('click', async () => {
+            if (confirm('Voulez-vous vraiment tout effacer ?')) {
+                await fetch('/api/cache/clear', { method: 'POST' });
+                files = [];
+                currentIndex = 0;
+                extractionData = {};
+                gallerySection.classList.add('hidden');
+                mainContent.classList.remove('visible');
+                pdfContainer.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <h3>Aucun PDF sélectionné</h3>
+                        <p>Sélectionnez un fichier dans la galerie</p>
+                    </div>
+                `;
+                formContainer.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
+                        <h3>Aucune donnée</h3>
+                        <p>Sélectionnez un fichier pour voir les données extraites</p>
+                    </div>
+                `;
+                confirmBtn.disabled = true;
+                downloadAllBtn.disabled = true;
+                showToast('success', 'Tout a été effacé');
+            }
+        });
+
+        // Toast notification
+        function showToast(type, message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${type === 'success' ? 'var(--secondary)' : 'var(--danger)'}" stroke-width="2">
+                    ${type === 'success'
+                    ? '<polyline points="20 6 9 17 4 12"></polyline>'
+                    : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'}
+                </svg>
+                ${message}
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>
