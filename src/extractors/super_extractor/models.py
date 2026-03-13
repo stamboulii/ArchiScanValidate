@@ -2,9 +2,13 @@
 Models - Dataclasses et enums partagés
 """
 
+import re
+import logging
 from typing import Dict, Optional, Any, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class RoomType(Enum):
@@ -75,11 +79,11 @@ class ExtractedRoom:
 @dataclass
 class ExtractionResult:
     reference: str = ""
-    parcel_label: str = ""  # Label du lot (ex: "M011")
-    reference_valid: bool = True  # Validation: does reference exist in PDF text?
-    page_number: int = 0  # Numéro de page d'où vient l'extraction
+    parcel_label: str = ""
+    reference_valid: bool = True
+    page_number: int = 0
     property_type: str = "appartment"
-    property_type_hint: str = ""  # Hint from metadata (e.g., "magasin" from MAGASIN reference)
+    property_type_hint: str = ""
     typology: str = ""
     floor: str = ""
     building: str = ""
@@ -87,12 +91,10 @@ class ExtractionResult:
     address: str = ""
     living_space: float = 0.0
     annex_space: float = 0.0
-    # Nouveaux champs pour maisons
     surface_propriete: float = 0.0
     surface_espaces_verts: float = 0.0
-    # Fields to store option detection from raw text parsing
-    has_terrace_detected: bool = False  # Terrasse detected in raw text
-    has_balcony_detected: bool = False  # Balcon detected in raw text
+    has_terrace_detected: bool = False
+    has_balcony_detected: bool = False
     niveaux: List[str] = field(default_factory=list)
     rooms: List[ExtractedRoom] = field(default_factory=list)
     composites: Dict[str, List[str]] = field(default_factory=dict)
@@ -100,7 +102,7 @@ class ExtractionResult:
     validation_warnings: List[str] = field(default_factory=list)
     sources: Dict[str, str] = field(default_factory=dict)
     raw_text: str = ""
-    floor_results: "List[Any]" = field(default_factory=list)  # pour duplex/maison multi-niveaux
+    floor_results: "List[Any]" = field(default_factory=list)
     promoter_detected: str = ""
 
     @property
@@ -124,321 +126,278 @@ class ExtractionResult:
         """Extract exterior surface (balcony/terrace) from raw text using regex."""
         if not raw_text:
             return 0.0
-        import re
-        # Pattern to find "Balcon" or "Terrasse" followed by a surface value
-        # Handles formats like "Balcon 15.99 m²", "Balcon 15,99m²", "Balcon : 15.99"
-        # Also handles multi-line format where name and surface are on separate lines
         patterns = [
-            rf'{surface_type}\s*:\s*(\d+[,\.]\d+)\s*m?²?',  # "Balcon: 15.99 m²"
-            rf'{surface_type}\s+(\d+[,\.]\d+)\s*m?²?',        # "Balcon 15.99 m²"
-            rf'{surface_type}\s+[A-Za-z0-9_-]+\s*(\d+[,\.]\d+)',  # "Balcon A011 15.99"
-            # Multi-line patterns (name on one line, surface on next)
-            rf'{surface_type}\s*\n\s*(\d+[,\.]\d+)\s*m?²?',  # "Balcon\n15.99 m²"
-            rf'{surface_type}\s*\r\n\s*(\d+[,\.]\d+)\s*m?²?',  # "Balcon\r\n15.99 m²"
+            rf'{surface_type}\s*:\s*(\d+[,\.]\d+)\s*m?²?',
+            rf'{surface_type}\s+(\d+[,\.]\d+)\s*m?²?',
+            rf'{surface_type}\s+[A-Za-z0-9_-]+\s*(\d+[,\.]\d+)',
+            rf'{surface_type}\s*\n\s*(\d+[,\.]\d+)\s*m?²?',
+            rf'{surface_type}\s*\r\n\s*(\d+[,\.]\d+)\s*m?²?',
         ]
-        # Find ALL matches and return the maximum value
         all_surfaces = []
         for pattern in patterns:
-            matches = re.finditer(pattern, raw_text, re.IGNORECASE | re.DOTALL)
-            for match in matches:
+            for match in re.finditer(pattern, raw_text, re.IGNORECASE | re.DOTALL):
                 try:
-                    surface_val = float(match.group(1).replace(',', '.'))
-                    all_surfaces.append(surface_val)
+                    all_surfaces.append(float(match.group(1).replace(',', '.')))
                 except ValueError:
                     pass
-        if all_surfaces:
-            return max(all_surfaces)
-        return 0.0
+        return max(all_surfaces) if all_surfaces else 0.0
+
+    def _extract_wc_surface_from_raw(self, raw_text: str) -> float:
+        """Extract WC surface from raw text using regex."""
+        if not raw_text:
+            return 0.0
+        patterns = [
+            r'WC\s*:\s*(\d+[,\.]\d+)\s*m?²?',
+            r'WC\s+(\d+[,\.]\d+)\s*m?²?',
+            r'WC\s+[A-Za-z0-9_-]+\s*(\d+[,\.]\d+)',
+        ]
+        all_surfaces = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, raw_text, re.IGNORECASE):
+                try:
+                    all_surfaces.append(float(match.group(1).replace(',', '.')))
+                except ValueError:
+                    pass
+        return max(all_surfaces) if all_surfaces else 0.0
+
+    # ----------------------------------------------------------------
+    # Display key mapping: name_normalized base -> display label
+    # Preserves all specificity from RoomNormalizer (buanderie, arriere_cuisine, etc.)
+    # ----------------------------------------------------------------
+    _NORM_TO_DISPLAY = {
+        # Interior
+        'sejour':           'SEJOUR',
+        'sejour_cuisine':   'SEJOUR_CUISINE',
+        'reception':        'RECEPTION',
+        'cuisine':          'CUISINE',
+        'arriere_cuisine':  'ARRIERE_CUISINE',
+        'buanderie':        'BUANDERIE',
+        'entree':           'ENTREE',
+        'circulation':      'DEGAGEMENT',
+        'palier':           'PALIER',
+        'placard':          'PLACARD',
+        'placard_escalier': 'PLACARD_ESCALIER',
+        'storage':          'PLACARD',
+        'dressing':         'DRESSING',
+        'rangement':        'RANGEMENT',
+        'salle_de_bain':    'SALLE_DE_BAIN',
+        'salle_d_eau':      'SALLE_EAU',
+        'wc':               'WC',
+        'chambre':          'CHAMBRE',
+        # Exterior
+        'balcon':           'BALCON',
+        'terrasse':         'TERRASSE',
+        'garden':           'JARDIN',
+        'loggia':           'LOGGIA',
+        'patio':            'PATIO',
+        'porche':           'PORCHE',
+        'parking':          'PARKING',
+        'garage':           'GARAGE',
+        'cave':             'CAVE',
+    }
+
+    def _to_display_key(self, room: ExtractedRoom) -> str:
+        """
+        Convert name_normalized to display key, preserving numeric suffixes.
+
+        Examples:
+            'balcon_1'      -> 'BALCON_1'
+            'balcon_2'      -> 'BALCON_2'
+            'salle_d_eau_1' -> 'SALLE_EAU_1'
+            'chambre_3'     -> 'CHAMBRE_3'
+            'buanderie'     -> 'BUANDERIE'
+            'arriere_cuisine' -> 'ARRIERE_CUISINE'
+        """
+        name = room.name_normalized or ''
+
+        # Extract trailing _N suffix (e.g. '_1', '_2')
+        m = re.search(r'_(\d+)$', name)
+        suffix = f'_{m.group(1)}' if m else ''
+        base   = name[:m.start()] if m else name
+
+        display_base = self._NORM_TO_DISPLAY.get(base, base.upper())
+        return f'{display_base}{suffix}'
 
     def to_legacy_format(self, include_raw_text: bool = False) -> Dict[str, Any]:
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        # Build surface_detail with proper room name handling:
-        # - Map room types to expected display names
-        # - Merge duplicates (keep largest surface)
+
         surface_detail = {}
-        
-        def get_display_name(room):
-            '''Handle room name mapping'''
-            room_type = room.room_type
-            type_to_name = {
-                'LIVING_ROOM': 'SEJOUR',
-                'RECEPTION': 'SEJOUR', 
-                'KITCHEN': 'CUISINE',
-                'LIVING_KITCHEN': 'SEJOUR_CUISINE',
-                'ENTRY': 'ENTREE',
-                'BEDROOM': 'CHAMBRE',
-                'BATHROOM': 'SALLE_DE_BAIN',
-                'SHOWER_ROOM': 'SDE',
-                'WC': 'WC',
-                'CIRCULATION': 'CIRCULATION',
-                'STORAGE': 'PLACARD',
-                'DRESSING': 'DRESSING',
-                'BALCONY': 'BALCON',
-                'TERRACE': 'TERRASSE',
-                'GARDEN': 'JARDIN',
-                'LOGGIA': 'LOGGIA',
-                'PATIO': 'PATIO',
-                'PARKING': 'PARKING',
-                'CELLAR': 'CAVE',
-            }
-            base = type_to_name.get(room_type.name, room_type.value.upper())
-            if room.room_number and room.room_number > 0:
-                return f'{base}_{room.room_number}'
-            return base
-        
-        # Process rooms: map names and merge duplicates (keep largest surface)
+
+        # ----------------------------------------------------------------
+        # Step 1: Build surface_detail from name_normalized.
+        # Trust RoomNormalizer's output — it already handles numbering
+        # (balcon_1, balcon_2, salle_d_eau_1, chambre_2 …).
+        # Keep the largest surface on key collision.
+        # ----------------------------------------------------------------
         for room in self.rooms:
-            display_name = get_display_name(room)
-            if display_name in surface_detail:
-                if room.surface > surface_detail[display_name]:
-                    surface_detail[display_name] = room.surface
-            else:
-                surface_detail[display_name] = room.surface
-        
-        # Add TOTAL_HABITABLE and TOTAL_ANNEXE (without SURFACE prefix - extract_cli adds it)
-        habitable = self.living_space if self.living_space else self.interior_surface_calc
-        annexe = self.annex_space if self.annex_space else self.annex_surface_calc
+            key     = self._to_display_key(room)
+            surface = room.surface or 0.0
+
+            # Surface range guard: reject values outside known bounds for this room type.
+            # Catches spatial extractor mis-pairs (e.g. balcony grabbing living_space total).
+            if surface > 0 and room.room_type in SURFACE_RANGES:
+                lo, hi = SURFACE_RANGES[room.room_type]
+                if surface > hi:
+                    logger.warning(
+                        f"Surface hors-plage ignorée: {room.name_normalized} "
+                        f"{surface}m² (max {hi}m²)"
+                    )
+                    surface = 0.0
+
+            if surface > 0 and (key not in surface_detail or surface > surface_detail[key]):
+                surface_detail[key] = surface
+
+        # ----------------------------------------------------------------
+        # Step 2: WC sanity check — raw-text override when value is wrong
+        # ----------------------------------------------------------------
+        wc_surface = self._extract_wc_surface_from_raw(self.raw_text)
+        if wc_surface > 0 and 'WC' in surface_detail:
+            if surface_detail['WC'] > 4 and wc_surface < surface_detail['WC']:
+                surface_detail['WC'] = wc_surface
+
+        # ----------------------------------------------------------------
+        # Step 3: Totals (no SURFACE prefix — extract_cli adds it)
+        # ----------------------------------------------------------------
+        habitable = self.living_space or self.interior_surface_calc
+        annexe    = self.annex_space  or self.annex_surface_calc
         if habitable > 0:
             surface_detail['TOTAL_HABITABLE'] = round(habitable, 2)
         if annexe > 0:
             surface_detail['TOTAL_ANNEXE'] = round(annexe, 2)
-        
-        # Ensure BATHROOM (SALLE_DE_BAIN) and SHOWER_ROOM (SDE) are always included
-        # Check by both room_type AND name_normalized to catch all cases
-        bathroom_rooms = [r for r in self.rooms 
-                         if r.room_type == RoomType.BATHROOM 
-                         or 'salle_de_bain' in r.name_normalized]
-        shower_rooms = [r for r in self.rooms 
-                       if r.room_type == RoomType.SHOWER_ROOM
-                       or 'salle_d_eau' in r.name_normalized
-                       or 'sde' in r.name_normalized.lower()]
-        
-        # Get unique surfaces (avoid duplicates with same surface)
-        bathroom_surfaces = list(set(round(r.surface, 2) for r in bathroom_rooms))
-        shower_surfaces = list(set(round(r.surface, 2) for r in shower_rooms))
-        
-        if bathroom_surfaces:
-            surface_detail['SALLE_DE_BAIN'] = max(bathroom_surfaces)
-        if shower_surfaces:
-            surface_detail['SDE'] = max(shower_surfaces)
-        
-        # Ensure CUISINE is always included
-        cuisine_rooms = [r for r in self.rooms 
-                       if r.room_type == RoomType.KITCHEN 
-                       or 'cuisine' in r.name_normalized.lower()]
-        cuisine_surfaces = list(set(round(r.surface, 2) for r in cuisine_rooms))
-        if cuisine_surfaces:
-            surface_detail['CUISINE'] = max(cuisine_surfaces)
-        
-        # Determine options - set to true if room type exists OR detected from raw text
-        has_garden  = (
-            any(r.room_type == RoomType.GARDEN for r in self.rooms)
-            or self.surface_espaces_verts > 0  # fallback: détecté dans les métadonnées
+
+        # ----------------------------------------------------------------
+        # Step 4: Options — derived directly from rooms, no overrides
+        # ----------------------------------------------------------------
+        has_balcony = (
+            any(r.room_type == RoomType.BALCONY for r in self.rooms)
+            or self.has_balcony_detected
         )
-        # Check for balcony/terrace room type existence OR detection from raw text
-        has_balcony = any(r.room_type == RoomType.BALCONY for r in self.rooms) or self.has_balcony_detected
-        has_terrace = any(r.room_type == RoomType.TERRACE for r in self.rooms) or self.has_terrace_detected
+        has_terrace = (
+            any(r.room_type == RoomType.TERRACE for r in self.rooms)
+            or self.has_terrace_detected
+        )
+        has_garden = (
+            any(r.room_type == RoomType.GARDEN for r in self.rooms)
+            or self.surface_espaces_verts > 0
+        )
         has_loggia = any(r.room_type == RoomType.LOGGIA for r in self.rooms)
-        has_duplex = False
-        # Only detect duplex for apartments with explicit duplex indicators
-        # Not for simple floor numbers like "2" or "R+1"
-        if self.property_type != 'magasin' and self.property_type != 'commercial':
-            if self.floor:
-                floor_upper = self.floor.upper()
-                # Only mark as duplex if explicitly mentioned in floor name
-                if 'DUPLEX' in floor_upper:
-                    has_duplex = True
-                # Only mark as duplex if floor has explicit multi-level pattern like "R+1+R+2"
-                # NOT for single floor like "2", "R+1", etc.
-                elif '+' in floor_upper and 'R+' in floor_upper and floor_upper.count('R+') > 1:
-                    has_duplex = True
-            # Also check for explicit duplex mention in raw text
-            if not has_duplex and self.raw_text and 'duplex' in self.raw_text.lower():
-                has_duplex = True
-        
-        # Fallback: detect terrace and balcony from raw text ONLY if not found in rooms
-        # Also check for exterior spaces like "Terrasse", "Balcon", "Jardin", "Exterieur", "Loggia"
-        # Set to true if room type exists (regardless of surface value)
-        if self.raw_text:
-            raw_lower = self.raw_text.lower()
-            # Check for terrace - only if no actual terrace room found AND text has meaningful terrace info
-            if not has_terrace:
-                # Check for any terrace room (surface can be 0)
-                terrace_rooms = [r for r in self.rooms if r.room_type == RoomType.TERRACE]
-                has_terrace = len(terrace_rooms) > 0
-            # Check for balcony - only if no actual balcony room found
-            if not has_balcony:
-                # Also check raw text for balcony keyword (even without surface)
-                if self.raw_text and 'balcon' in self.raw_text.lower():
-                    has_balcony = True
-                else:
-                    balcony_rooms = [r for r in self.rooms if r.room_type == RoomType.BALCONY]
-                    has_balcony = len(balcony_rooms) > 0
-            # Check for loggia - only if no actual loggia room found
-            if not has_loggia:
-                loggia_rooms = [r for r in self.rooms if r.room_type == RoomType.LOGGIA]
-                has_loggia = len(loggia_rooms) > 0
-            # Check for garden - only if no actual garden room found
-            if not has_garden:
-                garden_rooms = [r for r in self.rooms if r.room_type == RoomType.GARDEN]
-                has_garden = len(garden_rooms) > 0 or self.surface_espaces_verts > 0
-            # Check for exterior (balcony/terrace indicator) - only if no actual exterior found
-            # Set to true if any exterior room type exists (regardless of surface value)
-            if not has_balcony and not has_terrace:
-                # Check for any exterior rooms
-                has_balcony = self.annex_surface_calc > 0
-        has_loggia = has_loggia or any(r.room_type == RoomType.LOGGIA for r in self.rooms)
-        # Parking pur: type PARKING dont le nom normalisé NE contient PAS 'garage'
         has_parking = any(
-            r.room_type == RoomType.PARKING and "garage" not in r.name_normalized.lower()
+            r.room_type == RoomType.PARKING
+            and 'garage' not in r.name_normalized.lower()
             for r in self.rooms
         )
-        # Garage: type PARKING dont le nom normalisé contient 'garage' (ou 'box')
-        # OU cave/cellar (il arrive que le garage soit classé en cave pour les maisons)
-        has_garage = (
-            any(
-                r.room_type == RoomType.PARKING
-                and ("garage" in r.name_normalized.lower() or "box" in r.name_normalized.lower())
-                for r in self.rooms
+        has_garage = any(
+            r.room_type == RoomType.PARKING
+            and (
+                'garage' in r.name_normalized.lower()
+                or 'box' in r.name_normalized.lower()
             )
-            or any(r.room_type == RoomType.CELLAR for r in self.rooms)
+            for r in self.rooms
         )
-        
-        # Add option surfaces to surface_detail when option is true (only if not already present)
-        # Include even if no surface found - to show the option exists
-        if has_garden and "garden" not in surface_detail:
-            garden_surfaces = [r.surface for r in self.rooms if r.room_type == RoomType.GARDEN]
-            if garden_surfaces:
-                surface_detail["garden"] = max(garden_surfaces)
-            elif self.surface_espaces_verts > 0:
-                surface_detail["garden"] = self.surface_espaces_verts
-            else:
-                # Include even with no surface to indicate option exists
-                surface_detail["garden"] = 0
-        if has_balcony and "balcony" not in surface_detail:
-            balcony_surfaces = [r.surface for r in self.rooms if r.room_type == RoomType.BALCONY]
-            if balcony_surfaces:
-                surface_detail["balcony"] = max(balcony_surfaces)
-            else:
-                # Try to extract balcony surface from raw text
-                balcony_surface = self._extract_exterior_surface_from_raw('balcon', self.raw_text)
-                if balcony_surface:
-                    surface_detail["balcony"] = balcony_surface
-                else:
-                    # Include even with no surface to indicate option exists
-                    surface_detail["balcony"] = 0
-        if has_terrace and "terrace" not in surface_detail and not any(k.lower().startswith("terrasse") for k in surface_detail):
-            terrace_surfaces = [r.surface for r in self.rooms if r.room_type == RoomType.TERRACE]
-            if terrace_surfaces:
-                surface_detail["terrace"] = max(terrace_surfaces)
-            else:
-                # Try to extract terrace surface from raw text
-                terrace_surface = self._extract_exterior_surface_from_raw('terrasse', self.raw_text)
-                if terrace_surface:
-                    surface_detail["terrace"] = terrace_surface
-                else:
-                    # Include even with no surface to indicate option exists
-                    surface_detail["terrace"] = 0
-        if has_loggia and "loggia" not in surface_detail:
-            loggia_surfaces = [r.surface for r in self.rooms if r.room_type == RoomType.LOGGIA]
-            if loggia_surfaces:
-                surface_detail["loggia"] = max(loggia_surfaces)
-            else:
-                # Include even with no surface to indicate option exists
-                surface_detail["loggia"] = 0
-        if has_parking and "parking" not in surface_detail:
-            parking_surfaces = [r.surface for r in self.rooms if r.room_type == RoomType.PARKING]
-            if parking_surfaces:
-                surface_detail["parking"] = max(parking_surfaces)
-            else:
-                # Include even with no surface to indicate option exists
-                surface_detail["parking"] = 0
-        if has_garage and "garage" not in surface_detail:
-            garage_surfaces = [r.surface for r in self.rooms if r.room_type in (RoomType.PARKING, RoomType.CELLAR)]
-            if garage_surfaces:
-                surface_detail["garage"] = max(garage_surfaces)
-            else:
-                # Include even with no surface to indicate option exists
-                surface_detail["garage"] = 0
-        
+
+        has_duplex = False
+        if self.property_type not in ('magasin', 'commercial'):
+            if self.floor:
+                fu = self.floor.upper()
+                has_duplex = (
+                    'DUPLEX' in fu
+                    or ('+' in fu and fu.count('R+') > 1)
+                )
+            if not has_duplex and self.raw_text:
+                has_duplex = 'duplex' in self.raw_text.lower()
+
+        # ----------------------------------------------------------------
+        # Step 5: Build result dict
+        # ----------------------------------------------------------------
         result = {
             self.reference: {
-                "parcelTypeId": self.property_type,
+                "parcelTypeId":    self.property_type,
                 "parcelTypeLabel": self._property_label(),
-                "typology": self.typology,
-                "floor": self.floor,
-                "building": self.building,
-                "orientation": "",
-                "price": "N.C",
-                "living_space": str(self.living_space) if self.living_space else str(self.interior_surface_calc),
-                "annex_space": str(self.annex_space if self.annex_space else self.annex_surface_calc),
-                "surfaceDetail": surface_detail,
+                "typology":        self.typology,
+                "floor":           self.floor,
+                "building":        self.building,
+                "orientation":     "",
+                "price":           "N.C",
+                "living_space":    (
+                    str(self.living_space)
+                    if self.living_space
+                    else str(self.interior_surface_calc)
+                ),
+                "annex_space": str(
+                    self.annex_space if self.annex_space else self.annex_surface_calc
+                ),
+                "surfaceDetail":    surface_detail,
                 "surfaceComposites": self.composites,
-                "multi_floor_surfaces": getattr(self, 'multi_floor_surfaces', {}),  # Add floor surfaces
+                "multi_floor_surfaces": getattr(self, 'multi_floor_surfaces', {}),
                 "surfaceTotals": {
-                    "habitable": self.living_space if self.living_space else self.interior_surface_calc,
+                    "habitable":      self.living_space or self.interior_surface_calc,
                     "habitable_calc": self.interior_surface_calc,
-                    "annexe": self.annex_space if self.annex_space else self.annex_surface_calc,
-                    "annexe_calc": self.annex_surface_calc,
+                    "annexe":         self.annex_space or self.annex_surface_calc,
+                    "annexe_calc":    self.annex_surface_calc,
                 },
                 "option": {
-                    "balcony": has_balcony,
-                    "terrace": has_terrace,
-                    "garden": has_garden,
-                    "loggia": has_loggia,
-                    "duplex": has_duplex,
-                    "parking": has_parking,
-                    "garage": has_garage,
+                    "balcony":       has_balcony,
+                    "terrace":       has_terrace,
+                    "garden":        has_garden,
+                    "loggia":        has_loggia,
+                    "duplex":        has_duplex,
+                    "parking":       has_parking,
+                    "garage":        has_garage,
                 },
-                "tva": "",
-                "pinel": "",
-                "state": "available",
+                "tva":    "",
+                "pinel":  "",
+                "state":  "available",
                 "customData": {
-                    "sources": self.sources,
-                    "method": "super_extractor_v3",
+                    "sources":  self.sources,
+                    "method":   "super_extractor_v3",
                     "promoter": self.promoter_detected,
-                    "address": self.address,
-                    "program": self.program_name,
-                    # Nouveaux champs pour maisons
+                    "address":  self.address,
+                    "program":  self.program_name,
                     "surface_propriete_totale": self.surface_propriete,
-                    "surface_espaces_verts": self.surface_espaces_verts,
-                    "niveaux": self.niveaux if self.niveaux else self._floor_to_niveaux(self.floor),
+                    "surface_espaces_verts":    self.surface_espaces_verts,
+                    "niveaux": (
+                        self.niveaux
+                        if self.niveaux
+                        else self._floor_to_niveaux(self.floor)
+                    ),
                 },
-                "pageNumber": self.page_number,
+                "pageNumber":  self.page_number,
                 "parcelLabel": self.parcel_label or self.reference,
                 "_validation": {
-                    "is_valid": len(self.validation_errors) == 0,
+                    "is_valid":        len(self.validation_errors) == 0,
                     "reference_valid": self.reference_valid,
-                    "errors": self.validation_errors,
-                    "warnings": self.validation_warnings,
+                    "errors":          self.validation_errors,
+                    "warnings":        self.validation_warnings,
                 },
             }
         }
-        
-        # Debug: afficher la cle et la presence de _validation
-        logger.info(f"to_legacy_format: reference={self.reference}, has_validation={'_validation' in result[self.reference]}")
-        
-        # Ajouter le texte brut seulement si demande
+
+        logger.info(
+            f"to_legacy_format: reference={self.reference}, "
+            f"has_validation={'_validation' in result[self.reference]}"
+        )
+
         if include_raw_text and self.raw_text:
             result[self.reference]['_raw_text'] = self.raw_text
 
-        # Si multi-niveaux (duplex/maison): imbriquer les résultats par étage
+        # ----------------------------------------------------------------
+        # Step 6: Multi-floor (duplex/maison) — nest per-floor results
+        # ----------------------------------------------------------------
         if self.floor_results:
             nested = {}
             for floor_result in self.floor_results:
                 floor_legacy = floor_result.to_legacy_format(include_raw_text=False)
-                # floor_legacy = {"A18": {...}} → on veut {"A18_R+1": {...}}
-                floor_key = f"{floor_result.reference}_{floor_result.floor}"
-                inner = list(floor_legacy.values())[0]
+                floor_key    = f"{floor_result.reference}_{floor_result.floor}"
+                inner        = list(floor_legacy.values())[0]
                 inner["floor_key"] = floor_key
-                nested[floor_key] = inner
-            # Remplacer le contenu par la structure imbriquée
+                nested[floor_key]  = inner
             result[self.reference] = nested
 
         return result
-    
+
+    # ----------------------------------------------------------------
+    # Helpers
+    # ----------------------------------------------------------------
+
     def _floor_to_niveaux(self, floor: str) -> List[str]:
         """Convertit le floor string en liste de niveaux."""
         if not floor:
@@ -447,21 +406,17 @@ class ExtractionResult:
         niveaux = []
         if "RDC" in floor_upper or floor == "RDC":
             niveaux.append("Rez-de-chaussée")
-        # Chercher les etages (R+1, R+2, etc.)
-        import re
         for match in re.finditer(r"R\+(\d+)", floor_upper):
             niveau = int(match.group(1))
-            if niveau == 1:
-                niveaux.append("Étage")
-            else:
-                niveaux.append(f"{niveau}e étage")
+            niveaux.append("Étage" if niveau == 1 else f"{niveau}e étage")
         return niveaux
 
     def _property_label(self) -> str:
-        # Always return "Appartement" for both house and apartment types
-        # Also update parcelTypeId to "appartment" to match
         if self.property_type in ("appartment", "house"):
-            self.property_type = "appartment"  # Update to standard value
+            self.property_type = "appartment"
             return "appartement"
-        return {"commercial": "Commerce", "magasin": "Magasin", "office": "Bureau"
-                }.get(self.property_type, "appartement")
+        return {
+            "commercial": "Commerce",
+            "magasin":    "Magasin",
+            "office":     "Bureau",
+        }.get(self.property_type, "appartement")

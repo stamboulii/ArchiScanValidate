@@ -49,11 +49,12 @@ class RoomNormalizer:
             (r"^(WC\s*[/+]\s*SDE|WC\s*SDE)$",
             "salle_d_eau", RoomType.SHOWER_ROOM, False),
 
-            # ══════════════════════════════════════════
-            # RÉCEPTION (distinct de séjour)
+           # ══════════════════════════════════════════
+            # RÉCEPTION = séjour/cuisine combiné (certains promoteurs utilisent
+            # "Réception" pour désigner l'espace séjour+cuisine ouvert)
             # ══════════════════════════════════════════
             (r"^(RECEPTION|R[ÉE]CEPTION|PIECE\s*DE\s*RECEPTION)$",
-             "reception", RoomType.RECEPTION, False),
+             "sejour_cuisine", RoomType.LIVING_KITCHEN, False),
 
             # ══════════════════════════════════════════
             # SÉJOUR / SALON - numbered suffixes FIRST (before basic pattern)
@@ -80,7 +81,7 @@ class RoomNormalizer:
             (r"^(ENTREE\s*/\s*DGT|ENTR[ÉEée]E\s*/\s*D[ÉE]GAGEMENT|"
             r"HALL\s*/\s*DGT|ENTR[ÉEée]E\s*/\s*CIRCULATION)$",
             "entree", RoomType.ENTRY, False),
-            
+
             # === PLACARD (ajoute) ===
             # Note: pattern must NOT match "Pl (sous escalier)" - more specific patterns first
             (r"^PLACARD$", "placard", RoomType.STORAGE, False),
@@ -88,15 +89,15 @@ class RoomNormalizer:
             # Handle "Pl (sous escalier)" -> "placard_escalier"
             (r"^PL\s*\(.*?ESCALIER.*?\)$",
             "placard_escalier", RoomType.STORAGE, True),
-            
+
             # === RANGEMENT (ajoute) ===
             (r"^(RANGEMENT|STOCKAGE|DEBARRAS)$",
             "storage", RoomType.STORAGE, False),
-            
+
             # === RANGEMENT avec numero ===
             (r"^(RANGEMENT|PLACARD|DRESSING)\s*(\d+)$",
             "rangement_{n}", RoomType.STORAGE, False),
-            
+
             # === PI/Pl (placard abrege OCR) ===
             (r"^(PI|PLC|PL\.?)$",
             "placard", RoomType.STORAGE, False),
@@ -178,9 +179,9 @@ class RoomNormalizer:
             # RANGEMENTS
             # ══════════════════════════════════════════
             (r"^(DRESSING)\s*(\d*)$", "dressing", RoomType.DRESSING, False),
-               (r"^(BUANDERIE|LINGERIE)$", "buanderie", RoomType.STORAGE, False),
+            (r"^(BUANDERIE|LINGERIE)$", "buanderie", RoomType.STORAGE, False),
             (r"^ARRI[\u00c8E]RE\s*CUISINE$", "arriere_cuisine", RoomType.KITCHEN, False),
-         (r"^(PLACARD|CELLIER|RANGEMENT|RGT|"
+            (r"^(PLACARD|CELLIER|RANGEMENT|RGT|"
             r"LOCAL\s*TECHNIQUE|LOCAL\s*POUSSETTE|CELLIER\s*/\s*BUANDERIE|"
             r"GRENIER|REMISE|D[\u00c9E]BARRAS|CAVE\s*INT[\u00c9E]RIEURE|"
             r"LOCAL|STOCKAGE)$",
@@ -189,38 +190,29 @@ class RoomNormalizer:
             # ══════════════════════════════════════════
             # EXTÉRIEUR - BALCON
             # ══════════════════════════════════════════
-            # Handle "Balcon" alone (without surface value)
-            (r"^BALCON(?:Y)?$", "balcon", RoomType.BALCONY, True),
-            # Handle "Balcon 15.99 m²" format (with unit)
-            (r"^BALCON(?:Y)?\s*:?\s*(\d+[\.,]\d+)\s*m?²?", "balcon", RoomType.BALCONY, True),
-            (r"^BALCON(?:Y)?\s*:?\s*(\d*)$", "balcon{n}", RoomType.BALCONY, True),
-            (r"^BALCON:\s*(\d+[\.,]\d+)", "balcon", RoomType.BALCONY, True),
-            (r"^BALCON\s*(\d+)$", "balcon_{n}", RoomType.BALCONY, True),
-            
-            # ══════════════════════════════════════════
-            # EXTÉRIEUR - JARDIN
-            # ══════════════════════════════════════════
-            # Handle "SURFACE JARDIN" and "SURFACE GARDEN" → normalize to "garden"
-            (r"^SURFACE\s*JARDIN\s*:?\s*(\d+[\.,]\d+)?", "garden", RoomType.GARDEN, True),
-            (r"^SURFACE\s*GARDEN\s*:?\s*(\d+[\.,]\d+)?", "garden", RoomType.GARDEN, True),
-            # Handle "Jardin" without colon, "Jardin 29.3", etc.
-            (r"^JARDIN\s*:?\s*(\d+[\.,]\d+)", "garden", RoomType.GARDEN, True),
-            (r"^JARDIN\s*(\d+)$", "garden", RoomType.GARDEN, True),
-            (r"^JARDIN$", "garden", RoomType.GARDEN, True),
-            
-            # PORCHE (exterior)
-            (r"^(PORCHE|PORCH)$", "porche", RoomType.TERRACE, True),
-            (r"^BALCON:\s*(\d+[\.,]\d+)", "balcon", RoomType.BALCONY, True),
-            (r"^BALCON\s*(\d+)$", "balcon_{n}", RoomType.BALCONY, True),
+            # Numbered FIRST — "BALCON 1", "BALCON 2" etc.
+            # Group 1 = room number (integer), used as name suffix only, NOT as surface
+            (r"^BALCON(?:Y)?\s*(\d+)$",
+            "balcon_{n}", RoomType.BALCONY, True),
+            # Balcon avec surface sur la même ligne "BALCON 15.99 m²" or "BALCON: 15.99"
+            # Group 1 = surface value (float) — name stays plain "balcon"
+            (r"^BALCON(?:Y)?\s*:?\s*(\d+[\.,]\d+)\s*m?²?",
+            "balcon", RoomType.BALCONY, True),
+            # Balcon seul (sans numéro, sans surface)
+            (r"^BALCON(?:Y)?$",
+            "balcon", RoomType.BALCONY, True),
 
             # ══════════════════════════════════════════
             # EXTÉRIEUR - TERRASSE
             # ══════════════════════════════════════════
-            (r"^TERRASSE\s*(\d*)$", "terrasse", RoomType.TERRACE, True),
+            # Numbered FIRST — "TERRASSE 1", "TERRASSE 2"
+            (r"^TERRASSE\s*(\d+)$", "terrasse_{n}", RoomType.TERRACE, True),
             # Terrasse with unit code like "Terrasse C01" (surface may be on next line)
             (r"^TERRASSE\s+[A-Za-z0-9_-]+", "terrasse", RoomType.TERRACE, True),
             # Terrasse with surface on same line
             (r"^TERRASSE\s+[A-Za-z0-9_-]+.*?(\d+[\.,]\d+)", "terrasse", RoomType.TERRACE, True),
+            # Terrasse sans numéro
+            (r"^TERRASSE$", "terrasse", RoomType.TERRACE, True),
             # Terrasse avec jardinière (format "TERRASSE+JARDINIERE")
             (r"^TERRASSE\s*\+\s*(JARDINIERE|JARDIN[IÈ]RE|JARDIN)\s*(\d*)$",
             "terrasse", RoomType.TERRACE, True),
@@ -256,10 +248,7 @@ class RoomNormalizer:
             (r"^(PATIO|COUR|COURETTE|COUR\s*ANGLAISE)\s*(\d*)$",
             "patio", RoomType.PATIO, True),
             # Porche (covered entrance area)
-            (r"^(PORCHE)\s*(\d*[\.,]?\d*)$",
-            "porche", RoomType.TERRACE, True),
-            # Porche (covered entrance area)
-            (r"^(PORCHE)\s*(\d*[\.,]?\d*)$",
+            (r"^(PORCHE|PORCH)\s*(\d*[\.,]?\d*)$",
             "porche", RoomType.TERRACE, True),
 
             # ══════════════════════════════════════════
@@ -301,18 +290,18 @@ class RoomNormalizer:
         """
         # Nettoyer le nom: supprimer parenthèses, accents, etc.
         name_clean = name_raw.strip().upper()
-        
+
         # Supprimer les références comme "MI011" en début de chaîne
         # Patterns: M011, MI011, LOT_001, A008, etc.
         name_clean = re.sub(r"^(MI\d+|M\d+|LOT_?\d+|[A-Z]\d{2,})\s+", "", name_clean)
-        
+
         # Supprimer les parenthèses mais garder le contenu (format OCR: "(Garage)" -> "Garage")
         # Handle "Pièce de vie (Living room)" - parenthèses partout dans la chaîne
         name_clean = re.sub(r"\([^)]*\)", "", name_clean).strip()
-        
+
         # Supprimer les préfixes comme "m2" (format OCR corrompu: "m2 Entrée")
         name_clean = re.sub(r"^M2\s+", "", name_clean).strip()
-        
+
         # Supprimer le bruit OCR en FIN seulement (ex: 'Dgt.+Pl. !' → 'Dgt.+Pl.')
         # NB: le bruit en DÉBUT est géré par spatial_extractor._strip_line_noise()
         name_clean = re.sub(r"[^A-ZÀ-Ÿ0-9\.\+/\s]+$", "", name_clean).strip()
@@ -337,9 +326,12 @@ class RoomNormalizer:
             match = re.match(pattern, name_clean, re.IGNORECASE)
             if match:
                 # Extraire numéro si présent
+                # IMPORTANT: only treat a group as a room number if it is a pure integer.
+                # Float-like captures (e.g. "15.99" from "BALCON 15.99 m²") are surface
+                # values embedded in the name string — they must NOT be used as room numbers.
                 number = None
                 for g in match.groups():
-                    if g and g.isdigit():
+                    if g and re.match(r'^\d+$', g):   # integer only — not "15.99"
                         number = int(g)
                         break
 

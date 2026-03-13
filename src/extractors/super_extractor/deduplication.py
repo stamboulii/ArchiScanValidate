@@ -69,11 +69,12 @@ class DeduplicationUtils:
                 f"  🧹 Dedoublonnage: {len(rooms)} → {len(deduped)} pieces"
             )
         
-        # Pass 3: Remove duplicate bedrooms (same surface, different room number suffix)
+        # Pass 3: Remove duplicate bedrooms (same surface, different room number suffix or source)
         bedrooms = [r for r in deduped if r.room_type == RoomType.BEDROOM]
         non_bedrooms = [r for r in deduped if r.room_type != RoomType.BEDROOM]
         
-        if len(bedrooms) > 3:
+        # If more than 2 bedrooms, check for duplicates
+        if len(bedrooms) > 2:
             # Find duplicate bedrooms by surface (within 0.1 m2 tolerance)
             bedroom_surfaces = {}
             for b in bedrooms:
@@ -82,11 +83,16 @@ class DeduplicationUtils:
                     bedroom_surfaces[surf] = b
                 else:
                     # Keep the one with simpler name (e.g., 'chambre_1' over 'chambre_1_2')
+                    # Or keep the one from pymupdf_tb over ocr
                     existing = bedroom_surfaces[surf]
-                    if '_' in b.name_normalized and '_' not in existing.name_normalized:
+                    # Prefer pymupdf_tb source over ocr
+                    if b.source == 'pymupdf_tb' and existing.source != 'pymupdf_tb':
+                        bedroom_surfaces[surf] = b
+                    elif '_' in b.name_normalized and '_' not in existing.name_normalized:
                         bedroom_surfaces[surf] = b
             deduped = list(bedroom_surfaces.values()) + non_bedrooms
-            logger.info(f"  🔄 Removed duplicate bedrooms: {len(bedrooms) - len(bedroom_surfaces)}")
+            if len(bedrooms) > len(bedroom_surfaces):
+                logger.info(f"  🔄 Removed duplicate bedrooms: {len(bedrooms) - len(bedroom_surfaces)}")
         
         return deduped
     

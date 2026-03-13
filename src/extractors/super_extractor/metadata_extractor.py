@@ -21,8 +21,9 @@ class MetadataExtractor:
         # Priorité 0: code avec tiret (A-53, C-53, etc.) - must come BEFORE standalone letter+number
         r"\b([A-Z]-\d{2,4})\b",
         # Priorité 1: pattern explicite avec contexte
-        r"Appartement\s+([A-Z]\d{2,4})",
+        r"Appartement\s+([A-Z]{1,2}\d{2,4})",
         r"APPARTEMENT\s*[:\s]*([A-Z]\d{2,4})",
+        r"APPARTEMENT\s*[:\s]*([A-Z]{1,2}\d{2,4})",
         # Moroccan format: "APPARTEMENT N° : 17" or "APPARTEMENT N° 17"
         r"APPARTEMENT\s*N[°o]\s*[:\s]*(\d+)",
         r"APPARTEMENT\s*N[°o]\s*(\d+)",
@@ -36,8 +37,8 @@ class MetadataExtractor:
         r"NUMERO\s*LOT[^\n]{0,40}?(\b[A-Z]\d{1,2}-\d{3,4}\b)",
         r"\b([A-Z]\d{1,2}-\d{3,4})\b",  # B2-402, B1-101
         # Priorité 2: code seul (A008, B13, C234)
-        r"\b([A-Z]\d{3,4})\b",
-        r"\b([A-Z]\d{2})\b",  # ← REMETTRE mais avec blacklist
+        r"\b([A-Z]{1,2}\d{3,4})\b",   # CS104, A104, B13
+        r"\b([A-Z]{1,2}\d{2})\b",      # CS10, A08   # ← REMETTRE mais avec blacklist
         # Priorité 3: Standalone letter + space + number (A 101, B 203) - lower priority
         r"\b([A-Z])\s+(\d{3,4})\b",
     ]
