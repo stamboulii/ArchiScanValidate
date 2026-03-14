@@ -44,14 +44,14 @@ class MetadataExtractor:
     ]
 
     REF_BLACKLIST = {"R1", "R2", "R3", "T1", "T2", "T3", "T4", "T5", "T6",
-                 "A1", "A2", "A3", "B1", "B2", "B3",  # trop courts/génériques
-                 "DATE", "TYPE", "PLAN", "NOTA", "IND",
-                 # Articles de loi CCH (faux positifs)
-                 "L261", "R261", "L111", "R111", "L123", "R123",
-                 "L151", "R151", "L152", "R152", "L421", "R421",
-                 # Height codes from architectural drawings (Hauteur XXX cm)
-                 "H180", "H214", "H250", "H360", "H110", "H160", "H200",
-                 "H220", "H240", "H270", "H300", "H320", "H350", "H400"}
+                "A1", "A2", "A3", "B1", "B2", "B3",
+                "DATE", "TYPE", "PLAN", "NOTA", "IND",
+                "L261", "R261", "L111", "R111", "L123", "R123",
+                "L151", "R151", "L152", "R152", "L421", "R421",
+                "H180", "H214", "H250", "H360", "H110", "H160", "H200",
+                "H220", "H240", "H270", "H300", "H320", "H350", "H400",
+                "PP83", "PP93",  # ← ADD: legend equipment codes
+                }
 
     FLOOR_PATTERNS = [
         # Numeric floor codes: "Etage 001", "Etage 002" — keep as-is
@@ -137,6 +137,8 @@ class MetadataExtractor:
         r"SURFACE\s+APPARTEMENT\s*[:\s]*(\d+(?:[\.,]\d+)?)\s*m?²?",
         # Surface totale
         r"SURFACE\s+TOTALE\s*[:\s]*(\d+(?:[\.,]\d+)?)",
+        r"Surface\s+Habitable\s*[:\s]*\n?\s*(\d+(?:[\.,]\d+)?)",  # value on next line
+        r"Total\s+surface\s+[àa]\s+vivre\s*[:\s]*\n?\s*(\d+(?:[\.,]\d+)?)",
     ]
     
     # Multi-floor surface patterns - sum all floor surfaces
@@ -423,11 +425,30 @@ class MetadataExtractor:
         
         return ""
 
+    # def _extract_first(self, text, patterns, default):
+    #     for p in patterns:
+    #         m = re.search(p, text, re.IGNORECASE)
+    #         if m:
+    #             # Handle patterns with 2 groups (e.g. r"\b([A-Z])\s(\d{3,4})\b")
+    #             if m.lastindex and m.lastindex >= 2:
+    #                 ref = "".join(g for g in m.groups() if g).strip()
+    #             else:
+    #                 ref = m.group(1).strip()
+    #             ref = re.sub(r'\s+', '', ref)  # "A 101" → "A101"
+    #             if ref.upper() in self.REF_BLACKLIST:
+    #                 continue
+    #             # Rejeter si la ref est dans "L261-15" (article de loi)
+    #             if re.search(rf"\\b{re.escape(ref)}-\\d{{1,2}}\\b", text, re.IGNORECASE):
+    #                 continue
+    #             # Accept refs >= 3 chars OR pattern like A101 OR short numeric like 17, 1, 2 (for Moroccan floor plans)
+    #             if len(ref) >= 3 or re.match(r"^[A-Z]\d{2,}$", ref) or re.match(r"^\d{1,3}$", ref):
+    #                 return ref
+    #     return default
+
     def _extract_first(self, text, patterns, default):
         for p in patterns:
             m = re.search(p, text, re.IGNORECASE)
             if m:
-                # Handle patterns with 2 groups (e.g. r"\b([A-Z])\s(\d{3,4})\b")
                 if m.lastindex and m.lastindex >= 2:
                     ref = "".join(g for g in m.groups() if g).strip()
                 else:
@@ -435,14 +456,15 @@ class MetadataExtractor:
                 ref = re.sub(r'\s+', '', ref)  # "A 101" → "A101"
                 if ref.upper() in self.REF_BLACKLIST:
                     continue
-                # Rejeter si la ref est dans "L261-15" (article de loi)
+                # ── ADD THIS ──
+                if re.match(r'^PP\d+$', ref, re.IGNORECASE):
+                    continue  # Legend/equipment codes (PP83, PP93) are not apartment refs
+                # ─────────────
                 if re.search(rf"\\b{re.escape(ref)}-\\d{{1,2}}\\b", text, re.IGNORECASE):
                     continue
-                # Accept refs >= 3 chars OR pattern like A101 OR short numeric like 17, 1, 2 (for Moroccan floor plans)
                 if len(ref) >= 3 or re.match(r"^[A-Z]\d{2,}$", ref) or re.match(r"^\d{1,3}$", ref):
                     return ref
         return default
-
     def _extract_building(self, text):
         """Extract building code without using blacklist (to allow B1, B2, etc.)"""
         for p in self.BUILDING_PATTERNS:

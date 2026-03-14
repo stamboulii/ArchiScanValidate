@@ -15,6 +15,7 @@ import logging
 
 # Add project to path
 import sys
+import copy
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Disable logging for clean extraction
@@ -51,21 +52,108 @@ def extract_pdf(file_path, reference_hint=None):
         # Use extract_all_pages for multi-page handling
         all_results = extractor.extract_all_pages(file_path, reference_hint)
         
-        # Flatten results - extract_all_pages returns {lot_ref: data}
+        # Process results - convert ExtractionResult objects to dicts
         if isinstance(all_results, dict):
-            # Filter out non-lot keys
+            # Filter out non-lot keys and convert values to dicts
             lot_results = {}
             for key, value in all_results.items():
                 # Skip internal keys
-                if not key.startswith('_') and isinstance(value, dict):
-                    lot_results[key] = value
+                if not key.startswith('_'):
+                    # Convert ExtractionResult to dict if needed
+                    if hasattr(value, 'to_legacy_format'):
+                        # Get the legacy format data
+                        legacy_data = value.to_legacy_format()
+                        
+                        # to_legacy_format returns {reference: lot_data_or_nested_structure}
+                        # We need to flatten this to get just the lot data for the UI
+                        if isinstance(legacy_data, dict) and len(legacy_data) == 1:
+                            reference_key = list(legacy_data.keys())[0]
+                            lot_data = legacy_data[reference_key]
+                            
+                            # Check if lot_data has the nested structure from floor_results
+                            # This happens when there are floor_results and to_legacy_format nests the data
+                            if isinstance(lot_data, dict) and 'floor_key' in lot_data:
+                                # This is the nested format from multi-floor results
+                                # Extract the actual lot data by removing the floor_key metadata
+                                lot_data_clean = {k: v for k, v in lot_data.items() if k != 'floor_key'}
+                                lot_results[reference_key] = lot_data_clean
+                            else:
+                                # This is already the flat format we want
+                                lot_results[reference_key] = lot_data
+                        else:
+                            # Unexpected format, but try to use what we have
+                            lot_results[key] = legacy_data if isinstance(legacy_data, dict) else {"error": "Invalid format"}
+                    else:
+                        lot_results[key] = value  # Assume it's already a dict
             
             if lot_results:
                 return lot_results
         
         # Fallback to single extraction
         result = extractor.extract(file_path, reference_hint)
-        return result.to_legacy_format()
+        if hasattr(result, 'to_legacy_format'):
+            # Get the legacy format data
+            legacy_data = result.to_legacy_format()
+            
+            # to_legacy_format returns {reference: lot_data_or_nested_structure}
+            # We need to flatten this to get just the lot data for the UI
+            if isinstance(legacy_data, dict) and len(legacy_data) == 1:
+                reference_key = list(legacy_data.keys())[0]
+                lot_data = legacy_data[reference_key]
+                
+                # Check if lot_data has the nested structure from floor_results
+                if isinstance(lot_data, dict) and 'floor_key' in lot_data:
+                    # This is the nested format from multi-floor results
+                    # Extract the actual lot data by removing the floor_key metadata
+                    lot_data_clean = {k: v for k, v in lot_data.items() if k != 'floor_key'}
+                    return {reference_key: lot_data_clean}
+                else:
+                    # This is already the flat format we want
+                    return {reference_key: lot_data}
+            else:
+                # Unexpected format, but try to create a valid structure
+                if isinstance(legacy_data, dict):
+                    # Use the first key as reference, or fallback to filename
+                    ref = reference_hint if reference_hint and not (reference_hint.startswith('PAGE_') or reference_hint == 'UNKNOWN') else list(legacy_data.keys())[0] if legacy_data else extract_lot_reference(filepath)
+                    if ref.startswith('PAGE_') or ref == 'UNKNOWN':
+                        ref = extract_lot_reference(filepath)
+                        if ref.startswith('PAGE_') or ref == 'UNKNOWN':
+                            ref = "UNKNOWN_LOT"
+                    # If the data looks like it's already lot data (not nested), use it directly
+                    # Otherwise, wrap it
+                    first_value = list(legacy_data.values())[0] if legacy_data else {}
+                    if isinstance(first_value, dict) and 'floor_key' not in first_value:
+                        return {ref: first_value}
+                    else:
+                        return {ref: {"error": "Could not parse extraction result", "raw_data": str(legacy_data)}}
+                else:
+                    # If it's not a dict, create an error structure
+                    ref = reference_hint if reference_hint and not (reference_hint.startswith('PAGE_') or reference_hint == 'UNKNOWN') else extract_lot_reference(filepath)
+                    if ref.startswith('PAGE_') or ref == 'UNKNOWN':
+                        ref = "UNKNOWN_LOT"
+                    return {ref: {"error": "Could not parse extraction result", "raw_data": str(legacy_data)}}
+        else:
+            # If result is already a dict, return it
+            # But ensure it's in the expected format {reference: data}
+            if isinstance(result, dict):
+                # Check if it's already in the format we want
+                # If it has a single key that doesn't start with _, assume it's already formatted
+                non_internal_keys = [k for k in result.keys() if not k.startswith('_')]
+                if len(non_internal_keys) == 1:
+                    return result
+                else:
+                    # Try to determine a good reference key
+                    ref = reference_hint if reference_hint and not (reference_hint.startswith('PAGE_') or reference_hint == 'UNKNOWN') else extract_lot_reference(filepath)
+                    if ref.startswith('PAGE_') or ref == 'UNKNOWN':
+                        ref = "UNKNOWN_LOT"
+                    # Wrap the entire dict under this reference
+                    return {ref: result}
+            else:
+                # If result is not a dict, create an error structure
+                ref = reference_hint if reference_hint and not (reference_hint.startswith('PAGE_') or reference_hint == 'UNKNOWN') else extract_lot_reference(filepath)
+                if ref.startswith('PAGE_') or ref == 'UNKNOWN':
+                    ref = "UNKNOWN_LOT"
+                return {ref: {"error": "Unexpected result type", "raw_data": str(result)}}
     except Exception as e:
         print(f"Error extracting {file_path}: {e}")
         return {"error": str(e)}
