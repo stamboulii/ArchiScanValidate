@@ -1041,18 +1041,21 @@
         // Delete individual file
         async function deleteFile(event, index) {
             event.stopPropagation();
-            if (confirm('Voulez-vous supprimer ce fichier ?')) {
-                const file = files[index];
+            const file = files[index];
+            const isSubLot = !!file.parent_file_id;
 
-                // Mark as deleted on server
-                try {
-                    await fetch('/api/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fileId: file.file_id })
-                    });
-                } catch (e) {
-                    console.error('Failed to delete on server:', e);
+            if (confirm('Voulez-vous supprimer ce fichier ?')) {
+                // Only delete on server if it's a real file (not a sub-lot view)
+                if (!isSubLot) {
+                    try {
+                        await fetch('/api/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ fileId: file.file_id })
+                        });
+                    } catch (e) {
+                        console.error('Failed to delete on server:', e);
+                    }
                 }
 
                 files.splice(index, 1);
@@ -1065,10 +1068,9 @@
                     mainContent.classList.remove('visible');
                 }
                 updateGallery();
-                showToast('success', 'Fichier supprimé');
+                showToast('success', isSubLot ? 'Lot supprimé de la vue' : 'Fichier supprimé');
             }
         }
-
         function loadFile(index) {
             currentIndex = index;
             const file = files[index];
@@ -1078,10 +1080,23 @@
                 card.classList.toggle('active', i === index);
             });
 
-            // Update PDF viewer
-            pdfContainer.innerHTML = `<embed src="/api/file/${file.file_id}" type="application/pdf">`;
+            // Use parent_file_id for PDF display if this is a sub-lot entry
+            const pdfFileId = file.parent_file_id || file.file_id;
+            const pageNum = file.page_number || 1;
+            const pdfUrl = encodeURIComponent(`/api/file/${pdfFileId}`);
 
-            // Load extraction data
+            // Clear first to force full reload
+            pdfContainer.innerHTML = '';
+
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'width:100%; height:100%; min-height:600px; border:none; border-radius:0.5rem;';
+
+            // Append first, then set src after short delay so PDF.js reads #page= correctly
+            pdfContainer.appendChild(iframe);
+            setTimeout(() => {
+                iframe.src = `/pdfjs/web/viewer.html?file=${pdfUrl}#page=${pageNum}`;
+            }, 50);
+
             loadExtractionForm(file);
             updatePDFCounter();
         }
@@ -1114,10 +1129,10 @@
             // Build form
             let html = '';
 
-            // Get the lot reference (first key in data)
+            // Get the lot reference from extracted data, not from filename
             const lotRef = Object.keys(data)[0];
             const lotData = data[lotRef] || {};
-            const key = extractLotReference(file.filename);
+            const key = lotData.parcelLabel || lotRef || extractLotReference(file.filename);
 
             // Basic Info
             html += `
@@ -1589,6 +1604,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         fileId: file.file_id,
+                        lotKey: file.lot_key || null,
                         correctedData: corrected
                     })
                 });

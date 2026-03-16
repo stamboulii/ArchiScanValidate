@@ -70,15 +70,16 @@ def extract_pdf(file_path, reference_hint=None):
                             reference_key = list(legacy_data.keys())[0]
                             lot_data = legacy_data[reference_key]
                             
+                            # ── Inject page_number from ExtractionResult ──
+                            page_number = getattr(value, 'page_number', 1)
+                            
                             # Check if lot_data has the nested structure from floor_results
-                            # This happens when there are floor_results and to_legacy_format nests the data
                             if isinstance(lot_data, dict) and 'floor_key' in lot_data:
-                                # This is the nested format from multi-floor results
-                                # Extract the actual lot data by removing the floor_key metadata
                                 lot_data_clean = {k: v for k, v in lot_data.items() if k != 'floor_key'}
+                                lot_data_clean['page_number'] = page_number
                                 lot_results[reference_key] = lot_data_clean
                             else:
-                                # This is already the flat format we want
+                                lot_data['page_number'] = page_number
                                 lot_results[reference_key] = lot_data
                         else:
                             # Unexpected format, but try to use what we have
@@ -181,23 +182,24 @@ def get_files():
                 lot_keys = [k for k in data.keys() if not k.startswith('file_')]
                 
                 if len(lot_keys) > 1:
-                    # Multiple lots - create separate entry for each
                     for lot_key in lot_keys:
+                        lot_data = data[lot_key]
                         files.append({
                             'file_id': f"{file_id}_{lot_key}",
                             'filename': f"{file_data['filename']} - {lot_key}",
                             'parent_file_id': file_id,
                             'lot_key': lot_key,
+                            'page_number': lot_data.get('page_number', 1),
                             'data': {lot_key: data[lot_key]}
                         })
                 else:
-                    # Single lot
                     lot_key = lot_keys[0] if lot_keys else 'unknown'
                     files.append({
                         'file_id': file_id,
                         'filename': file_data['filename'],
                         'parent_file_id': None,
                         'lot_key': lot_key,
+                        'page_number': data.get(lot_key, {}).get('page_number', 1),
                         'data': data
                     })
     
@@ -206,6 +208,11 @@ def get_files():
         'files': files
     })
 
+from flask import send_from_directory
+
+@app.route('/pdfjs/<path:filename>')
+def pdfjs(filename):
+    return send_from_directory('static/pdfjs', filename)
 
 @app.route('/api/upload', methods=['POST'])
 def upload_files():
@@ -311,10 +318,25 @@ def save_corrected():
     
     data = request.json
     file_id = data.get('fileId')
+    lot_key = data.get('lotKey')
     corrected_data = data.get('correctedData')
+    print(f"[SAVE] file_id={file_id} lot_key={lot_key} corrected_data keys={list(corrected_data.keys()) if corrected_data else None}")
+
     
-    if file_id in extraction_cache:
-        extraction_cache[file_id]['corrected'] = corrected_data
+    # Find base file id (strip lot suffix if needed)
+    base_id = file_id
+    if base_id not in extraction_cache:
+        parts = base_id.rsplit('_', 1)
+        if len(parts) == 2 and parts[0] in extraction_cache:
+            base_id = parts[0]
+    
+    if base_id in extraction_cache:
+        if lot_key:
+            if 'corrected_lots' not in extraction_cache[base_id]:
+                extraction_cache[base_id]['corrected_lots'] = {}
+            extraction_cache[base_id]['corrected_lots'][lot_key] = corrected_data
+        else:
+            extraction_cache[base_id]['corrected'] = corrected_data
         return jsonify({'success': True})
     
     return jsonify({'error': 'File not found'}), 404
@@ -352,11 +374,18 @@ def download_json():
             
         filename = file_data['filename']
         
-        if file_data['corrected']:
-            # Use the corrected data - use parcelLabel as the key
+        # Check corrected_lots (multi-lot PDFs)
+        if file_data.get('corrected_lots'):
+            for lot_key, corrected in file_data['corrected_lots'].items():
+                key = corrected.get('parcelLabel', lot_key)
+                output[key] = corrected
+
+        # Check corrected (single-lot PDFs)
+        elif file_data.get('corrected'):
             corrected = file_data['corrected']
             key = corrected.get('parcelLabel', filename.replace('.pdf', ''))
             output[key] = corrected
+
         elif include_uncorrected:
             # Transform original data to desired format
             original_data = file_data['data']
@@ -456,12 +485,20 @@ def transform_to_format(key, lot_data):
     return result
 
 
-@app.route('/api/file/<file_id>')
+@app.route('/api/file/<path:file_id>')
 def get_file(file_id):
     """Get a file for display in viewer."""
-    if file_id in extraction_cache:
-        filepath = extraction_cache[file_id]['filepath']
-        return send_file(filepath, mimetype='application/pdf')
+    base_id = file_id
+    if base_id not in extraction_cache:
+        parts = base_id.rsplit('_', 1)
+        if len(parts) == 2 and parts[0] in extraction_cache:
+            base_id = parts[0]
+    
+    if base_id in extraction_cache:
+        filepath = extraction_cache[base_id]['filepath']
+        if os.path.exists(filepath):
+            return send_file(filepath, mimetype='application/pdf')
+    
     return jsonify({'error': 'File not found'}), 404
 
 
